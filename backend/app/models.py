@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -143,3 +144,118 @@ class SiteText(Base):
     value: Mapped[str] = mapped_column(Text, default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CmsPage(Base):
+    __tablename__ = "cms_pages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site: Mapped[str] = mapped_column(String(32), index=True)
+    locale: Mapped[str] = mapped_column(String(8), default="nl")
+    slug: Mapped[str] = mapped_column(String(160))
+    title: Mapped[str] = mapped_column(String(255))
+    seo_title: Mapped[str] = mapped_column(String(255), default="")
+    seo_description: Mapped[str] = mapped_column(Text, default="")
+    draft_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    published_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CmsPageVersion(Base):
+    __tablename__ = "cms_page_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    page_id: Mapped[int] = mapped_column(ForeignKey("cms_pages.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    project_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    html: Mapped[str] = mapped_column(Text, default="")
+    css: Mapped[str] = mapped_column(Text, default="")
+    note: Mapped[str] = mapped_column(String(255), default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CmsMenu(Base):
+    __tablename__ = "cms_menus"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site: Mapped[str] = mapped_column(String(32), index=True)
+    locale: Mapped[str] = mapped_column(String(8), default="nl")
+    area: Mapped[str] = mapped_column(String(32), default="header")
+    name: Mapped[str] = mapped_column(String(128))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    published_items: Mapped[list] = mapped_column(JSONB, default=list)
+    draft_items: Mapped[list] = mapped_column(JSONB, default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CmsMenuVersion(Base):
+    __tablename__ = "cms_menu_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    menu_id: Mapped[int] = mapped_column(ForeignKey("cms_menus.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    items: Mapped[list] = mapped_column(JSONB, default=list)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CmsPost(Base):
+    __tablename__ = "cms_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site: Mapped[str] = mapped_column(String(32), index=True)
+    locale: Mapped[str] = mapped_column(String(8), default="nl")
+    kind: Mapped[str] = mapped_column(String(16), default="blog")
+    slug: Mapped[str] = mapped_column(String(160))
+    title: Mapped[str] = mapped_column(String(255))
+    excerpt: Mapped[str] = mapped_column(Text, default="")
+    cover_url: Mapped[str] = mapped_column(String(512), default="")
+    draft_body: Mapped[str] = mapped_column(Text, default="")
+    published_body: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CmsPostVersion(Base):
+    __tablename__ = "cms_post_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("cms_posts.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    snapshot: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CmsMedia(Base):
+    __tablename__ = "cms_media"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site: Mapped[str] = mapped_column(String(32), index=True)
+    original_name: Mapped[str] = mapped_column(String(255))
+    stored_path: Mapped[str] = mapped_column(String(512))
+    public_url: Mapped[str] = mapped_column(String(512))
+    mime_type: Mapped[str] = mapped_column(String(128))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    alt: Mapped[str] = mapped_column(String(255), default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CmsCatalogCategory(Base):
+    __tablename__ = "cms_catalog_categories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    site: Mapped[str] = mapped_column(String(32), index=True)
+    slug: Mapped[str] = mapped_column(String(128))
+    title: Mapped[str] = mapped_column(String(255))
+    profession: Mapped[str] = mapped_column(String(128), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    image_url: Mapped[str] = mapped_column(String(512), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True)

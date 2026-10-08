@@ -38,6 +38,52 @@ class SiteSettingsUpdate(BaseModel):
     is_open: bool
 
 
+class CmsPageCreate(BaseModel):
+    site: Literal["uhrbv", "ukrwerkspot"]
+    locale: str = "nl"
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9/-]*$")
+    title: str = Field(min_length=1, max_length=255)
+    seo_title: str = ""
+    seo_description: str = ""
+
+
+class CmsPageSave(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    seo_title: str = ""
+    seo_description: str = ""
+    project_data: dict = Field(default_factory=dict)
+    html: str = ""
+    css: str = ""
+    note: str = ""
+    expected_version: int | None = None
+
+
+class CmsMenuSave(BaseModel):
+    items: list[dict]
+
+
+class CmsPostSave(BaseModel):
+    site: Literal["uhrbv", "ukrwerkspot"]
+    locale: str = "nl"
+    kind: Literal["news", "blog"]
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9/-]*$")
+    title: str = Field(min_length=1, max_length=255)
+    excerpt: str = ""
+    cover_url: str = ""
+    body: str = ""
+
+
+class CmsCategorySave(BaseModel):
+    site: Literal["uhrbv", "ukrwerkspot"]
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    title: str = Field(min_length=1, max_length=255)
+    profession: str = ""
+    description: str = ""
+    image_url: str = ""
+    sort_order: int = 0
+    is_visible: bool = True
+
+
 class CraftsmanApplication(BaseModel):
     name: str
     phone: str

@@ -10,7 +10,7 @@ from .auth import has_admin_session, has_preview_access
 from .config import ROOT, settings
 from .db import SessionLocal
 from .models import SiteText
-from .routers import admin, auth, public
+from .routers import admin, auth, cms_admin, cms_public, public
 from .seed import ensure_admin, ensure_texts
 
 
@@ -39,6 +39,8 @@ app.add_middleware(
 app.include_router(public.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(cms_admin.router, prefix="/api/v1")
+app.include_router(cms_public.router, prefix="/api/v1")
 
 admin_dir = ROOT / "frontend" / "admin"
 ukr_dir = ROOT / "frontend" / "ukrwerkspot"
