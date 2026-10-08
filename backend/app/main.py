@@ -89,4 +89,8 @@ def site_frontend(path: str, request: Request):
         can_preview = can_preview or has_admin_session(request)
     frontend_dir = site_dir / "preview" if _site_is_open(site) or can_preview else site_dir
     requested = _safe_file(frontend_dir, path) if path else None
-    return FileResponse(requested or frontend_dir / "index.html")
+    response_file = requested or frontend_dir / "index.html"
+    headers = None
+    if response_file.name == "index.html":
+        headers = {"Cache-Control": "no-store, max-age=0"}
+    return FileResponse(response_file, headers=headers)
