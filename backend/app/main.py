@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import has_admin_session, has_preview_access
@@ -57,6 +57,11 @@ def _shared_asset(path: str) -> Path | None:
     if not path.startswith("assets/"):
         return None
     return _safe_file(shared_dir, path.removeprefix("assets/"))
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_redirect():
+    return RedirectResponse("/admin/")
 
 
 @app.get("/admin/assets/{path:path}", include_in_schema=False)
