@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,7 +45,29 @@ app.include_router(cms_public.router, prefix="/api/v1")
 admin_dir = ROOT / "frontend" / "admin"
 ukr_dir = ROOT / "frontend" / "ukrwerkspot"
 uhr_dir = ROOT / "frontend" / "uhrbv"
+shared_dir = ROOT / "frontend" / "shared"
 uploads = settings.uploads_path
+
+# The admin is public before login, so it must not expose the site scripts (app.js, data.js)
+ADMIN_SHARED_FILES = {"styles.css", "workspace.css", "contrast.css"}
+ADMIN_SHARED_DIRS = ("images/", "vendor/")
+
+
+def _shared_asset(path: str) -> Path | None:
+    if not path.startswith("assets/"):
+        return None
+    return _safe_file(shared_dir, path.removeprefix("assets/"))
+
+
+@app.get("/admin/assets/{path:path}", include_in_schema=False)
+def admin_asset(path: str):
+    found = _safe_file(admin_dir / "assets", path)
+    if not found and (path in ADMIN_SHARED_FILES or path.startswith(ADMIN_SHARED_DIRS)):
+        found = _safe_file(shared_dir, path)
+    if not found:
+        raise HTTPException(status_code=404)
+    return FileResponse(found)
+
 
 if uploads.exists():
     app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
@@ -89,8 +111,11 @@ def site_frontend(path: str, request: Request):
     can_preview = has_preview_access(request, site)
     if site == "uhrbv":
         can_preview = can_preview or has_admin_session(request)
-    frontend_dir = site_dir / "preview" if _site_is_open(site) or can_preview else site_dir
+    full_site = _site_is_open(site) or can_preview
+    frontend_dir = site_dir / "preview" if full_site else site_dir
     requested = _safe_file(frontend_dir, path) if path else None
+    if not requested and full_site and path:
+        requested = _shared_asset(path)
     response_file = requested or frontend_dir / "index.html"
     headers = None
     if response_file.name == "index.html":
