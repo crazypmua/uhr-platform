@@ -86,7 +86,7 @@ git remote set-url origin git@github.com:OWNER/uhr-platform.git
 
 Команды ниже рассчитаны на Ubuntu 22.04/24.04. Вход первоначально выполняется
 пользователем с `sudo`.
-
+    
 ```bash
 sudo apt update
 sudo apt install -y git nginx postgresql postgresql-contrib \
@@ -262,9 +262,7 @@ sudo journalctl -u uhr.service -f
 Для обоих доменов должны существовать DNS-записи:
 
 - `uhrbv.nl` → A/AAAA сервера;
-- `www.uhrbv.nl` → A/AAAA сервера либо CNAME на `uhrbv.nl`;
 - `ukrwerkspot.nl` → A/AAAA сервера;
-- `www.ukrwerkspot.nl` → A/AAAA сервера либо CNAME.
 
 Проверьте:
 
@@ -279,9 +277,8 @@ dig +short ukrwerkspot.nl
 Если сертификатов ещё нет, сначала оставьте рабочие HTTP-блоки nginx и выполните:
 
 ```bash
-sudo certbot --nginx \
-  -d uhrbv.nl -d www.uhrbv.nl \
-  -d ukrwerkspot.nl -d www.ukrwerkspot.nl
+sudo certbot --nginx -d uhrbv.nl
+sudo certbot --nginx -d ukrwerkspot.nl
 ```
 
 Проверка автоматического продления:

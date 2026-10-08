@@ -32,7 +32,20 @@ jobs:
           command_timeout: 300s
           script: |
             set -e
+            mkdir -p "${{ env.APP_DIR }}"
             cd "${{ env.APP_DIR }}"
+
+            mkdir -p "$HOME/.ssh"
+            chmod 700 "$HOME/.ssh"
+            ssh-keyscan -H github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
+            chmod 600 "$HOME/.ssh/known_hosts"
+
+            if [ ! -d .git ]; then
+              git init
+              git remote add origin "git@github.com:${{ github.repository }}.git"
+            else
+              git remote set-url origin "git@github.com:${{ github.repository }}.git"
+            fi
 
             git fetch origin main
             git reset --hard origin/main
