@@ -1,0 +1,106 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_DIR: ${{ vars.APP_DIR || '/home/uhr/app' }}
+      HEALTH_URL: ${{ vars.HEALTH_URL || 'https://uhrbv.nl/api/v1/health' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        run: |
+          echo "${{ secrets.SERVER_SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+
+      - name: Deploy repo and Python deps on server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 300s
+          script: |
+            set -e
+            cd "${{ env.APP_DIR }}"
+
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd \
+              -e .env \
+              -e .venv \
+              -e uploads
+
+            if [ ! -d .venv ]; then
+              python3 -m venv .venv
+            fi
+
+            . .venv/bin/activate
+            pip install --upgrade pip
+            pip install -r backend/requirements.txt
+
+      - name: Restart services
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 120s
+          script: |
+            set -e
+            sudo -n systemctl restart uhr.service
+            echo "Deployed on $(date)"
+
+      - name: Check services
+        if: always()
+        id: check
+        run: |
+          PORT="${{ secrets.SERVER_SSH_PORT }}"
+          PORT="${PORT:-22}"
+          S="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+
+          API=$(ssh -i key.pem -p "$PORT" -o StrictHostKeyChecking=no "$S" \
+            "sudo -n systemctl is-active uhr.service" 2>/dev/null || true)
+          HEALTH=$(ssh -i key.pem -p "$PORT" -o StrictHostKeyChecking=no "$S" \
+            "curl -s -o /dev/null -w '%{http_code}' '${{ env.HEALTH_URL }}'" 2>/dev/null || true)
+
+          [ -z "$API" ] && API="inactive"
+          [ -z "$HEALTH" ] && HEALTH="000"
+
+          echo "api=${API}" >> "$GITHUB_OUTPUT"
+          echo "health=${HEALTH}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          ICON="✅"
+          [ "${{ job.status }}" != "success" ] && ICON="❌"
+
+          COMMIT_LINE=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+
+          TEXT="${ICON} uhr deploy: ${{ job.status }}%0A"
+          TEXT="${TEXT}API: ${{ steps.check.outputs.api }}%0A"
+          TEXT="${TEXT}Health: ${{ steps.check.outputs.health }}%0A"
+          TEXT="${TEXT}Commit: ${COMMIT_LINE}%0A"
+          TEXT="${TEXT}Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="${TEXT}" \
+            -d disable_web_page_preview=true

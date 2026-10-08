@@ -1,0 +1,14 @@
+[Unit]
+Description=UHR API and admin
+After=network.target postgresql.service
+
+[Service]
+User=uhr
+Group=uhr
+WorkingDirectory=/home/uhr/app
+ExecStart=/home/uhr/app/.venv/bin/uvicorn app.main:app --app-dir /home/uhr/app/backend --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
