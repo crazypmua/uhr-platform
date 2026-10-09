@@ -112,7 +112,7 @@ sudo -iu uhr
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
 ssh-keygen -t ed25519 -C "uhr-server-deploy" -f ~/.ssh/github_deploy
-cat ~/.ssh/github_deploy.pub
+cat ~/.ssh/github_deploy.pub 
 ```
 
 В GitHub откройте репозиторий → **Settings → Deploy keys → Add deploy key**:
