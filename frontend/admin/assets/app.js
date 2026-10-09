@@ -21,34 +21,29 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("uk-UA") : "—
 const badgeClass = (status) => (status === "approved" || status === "confirmed" || status === "done" ? "" : "yellow");
 
 const NAV = [
-  ["overview", "layout-dashboard", "Огляд"],
-  ["masters", "users", "Анкети майстрів"],
-  ["companies", "building-2", "Компанії"],
-  ["requests", "clipboard-list", "Заявки"],
+  ["overview", ICONS.overview, "Огляд"],
+  ["masters", ICONS.masters, "Анкети майстрів"],
+  ["companies", ICONS.companies, "Компанії"],
+  ["requests", ICONS.requests, "Заявки"],
+  ["messages", ICONS.messages, "Повідомлення"],
   ["cms", ICONS.siteEditor, "Редактор сайтів"],
-  ["settings", "settings", "Налаштування"],
+  ["settings", ICONS.settings, "Налаштування"],
 ];
-const EXTRA = [["messages", "messages-square", "Повідомлення"]];
-
-function brand() {
-  return `<a href="#overview" class="brand">UHR · Admin</a>`;
-}
 
 function shell(content, page) {
   const link = ([id, name, label]) =>
     `<a class="${page === id ? "active" : ""}" ${page === id ? 'aria-current="page"' : ""} href="#${id}">${icon(name)}${label}</a>`;
-  return `<div class="workspace">
-    <header class="workspace-header"><div class="workspace-nav">${brand()}
-      <nav aria-label="Адмінка">${NAV.map(link).join("")}</nav>
-      <details class="account-menu">
-        <summary>${icon("building-2")}<span>${esc(state.user?.name || "Менеджер")}</span>${icon("chevron-down")}</summary>
-        <div class="dropdown">${EXTRA.map(link).join("")}<a href="#logout" data-logout>${icon("log-out")}Вийти</a></div>
-      </details>
-    </div></header>
-    <main class="content">
-      <div class="topbar"><span>Спільна адмінка · Ukrwerkspot + UHR</span><span>${esc(state.user?.email || "")}</span></div>
-      ${content}
-    </main>
+  return `<div class="admin-layout">
+    <aside class="admin-sidebar">
+      <a href="#overview" class="admin-brand">UHR</a>
+      <nav class="admin-nav" aria-label="Меню">${NAV.map(link).join("")}</nav>
+      <div class="admin-account">
+        <strong>${esc(state.user?.name || "Менеджер")}</strong>
+        <span>${esc(state.user?.email || "")}</span>
+        <a href="#logout" data-logout>${icon(ICONS.logout)}Вийти</a>
+      </div>
+    </aside>
+    <main class="content admin-main">${content}</main>
   </div>`;
 }
 
@@ -65,7 +60,7 @@ function toast(text) {
 function loginPage(error = "") {
   return `<div class="wizard"><div class="card">
     <div class="eyebrow">UHR · Ukrwerkspot</div>
-    <h1>Спільна адмінка</h1>
+    <h1>Вхід</h1>
     <p>Увійдіть, щоб перевіряти анкети, заявки компаній і тексти сайтів.</p>
     ${error ? `<div class="note">${esc(error)}</div>` : ""}
     <form id="login-form">
