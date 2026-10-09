@@ -4,6 +4,11 @@ venv
 __pycache__/
 *.py[cod]
 *.egg-info/
+node_modules/
+frontend/admin/assets/cms.css
+frontend/admin/assets/vendor/grapesjs/
+frontend/uhrbv/preview/assets/cms-runtime.js
+frontend/ukrwerkspot/preview/assets/cms-runtime.js
 uploads/
 .idea/
 .vscode/

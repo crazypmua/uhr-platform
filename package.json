@@ -1,0 +1,13 @@
+{
+  "name": "uhr-platform",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-frontend.mjs"
+  },
+  "dependencies": {
+    "grapesjs": "0.22.13",
+    "sass": "1.93.2"
+  }
+}

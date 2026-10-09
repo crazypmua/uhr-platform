@@ -40,7 +40,7 @@ ALLOWED_ATTRS = {
     "img": ["src", "alt", "width", "height", "loading"],
     "button": ["type"],
     "section": ["data-cms-widget", "data-kind", "data-limit"],
-    "div": ["data-cms-widget", "data-kind", "data-limit"],
+    "div": ["data-cms-widget", "data-kind", "data-limit", "data-widget-content"],
 }
 ALLOWED_MIME = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
 MAX_UPLOAD = 10 * 1024 * 1024
@@ -62,6 +62,18 @@ def clean_css(value: str) -> str:
         if forbidden in lowered:
             raise HTTPException(status_code=422, detail=f"CSS містить заборонену конструкцію: {forbidden}")
     return value
+
+
+def clean_menu_items(items: list[dict]) -> list[dict]:
+    cleaned = []
+    for item in items[:50]:
+        label = str(item.get("label", "")).strip()[:120]
+        url = str(item.get("url", "/")).strip()[:500]
+        if not url.startswith(("/", "#", "https://", "mailto:", "tel:")):
+            raise HTTPException(status_code=422, detail=f"Недозволене посилання меню: {url}")
+        if label:
+            cleaned.append({"label": label, "url": url, "visible": bool(item.get("visible", True))})
+    return cleaned
 
 
 def page_out(page: CmsPage, db: Session, detail: bool = False) -> dict:
@@ -102,6 +114,36 @@ def pages(site: str | None = None, db: Session = Depends(get_db)):
     if site:
         query = query.filter(CmsPage.site == site)
     return [page_out(item, db) for item in query.all()]
+
+
+@router.post("/pages/bootstrap/{site}")
+def bootstrap_pages(site: str, user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    if site not in {"uhrbv", "ukrwerkspot"}:
+        raise HTTPException(status_code=404, detail="Сайт не знайдено")
+    uk = site == "ukrwerkspot"
+    defaults = [
+        ("home", "Головна" if uk else "Home",
+         f'<section class="hero"><div><div class="eyebrow">{"Українська майстерність. Нідерландські можливості." if uk else "Ukrainian expertise. Dutch ambition."}</div>'
+         f'<h1>{"Ваша майстерність. Наші можливості." if uk else "Goede mensen. Sterke projecten."}</h1>'
+         f'<p>{"Приєднуйтесь до бази перевірених майстрів." if uk else "Gekwalificeerde vakmensen voor de Nederlandse bouwsector."}</p></div></section>'),
+        ("about", "Про нас" if uk else "Over UHR", '<section class="section"><h1>Про нас</h1><p>Додайте текст у візуальному редакторі.</p></section>'),
+        ("contact", "Контакти" if uk else "Contact", '<section class="section"><h1>Контакти</h1><p>Додайте контактні дані.</p></section>'),
+        ("faq", "Поширені питання" if uk else "FAQ", '<section class="section"><h1>FAQ</h1><details><summary>Питання</summary><p>Відповідь</p></details></section>'),
+    ]
+    created = 0
+    for slug, title, html in defaults:
+        if db.query(CmsPage).filter_by(site=site, slug=slug).first():
+            continue
+        page = CmsPage(site=site, locale="uk" if uk else "nl", slug=slug, title=title)
+        db.add(page)
+        db.flush()
+        version = CmsPageVersion(page_id=page.id, version=1, project_data={}, html=html, css="", note="Початковий імпорт", created_by=user.id)
+        db.add(version)
+        db.flush()
+        page.draft_version_id = version.id
+        created += 1
+    db.commit()
+    return {"created": created}
 
 
 @router.post("/pages")
@@ -209,7 +251,7 @@ def save_menu(site: str, area: str, payload: CmsMenuSave, locale: str = "nl", db
     if not item:
         item = CmsMenu(site=site, locale=locale, area=area, name=area.title())
         db.add(item)
-    item.draft_items = payload.items
+    item.draft_items = clean_menu_items(payload.items)
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}
@@ -228,6 +270,26 @@ def publish_menu(
     db.add(CmsMenuVersion(menu_id=item.id, version=item.version, items=item.draft_items, created_by=user.id))
     db.commit()
     return {"ok": True, "version": item.version}
+
+
+@router.get("/menus/{site}/{area}/versions")
+def menu_versions(site: str, area: str, locale: str = "nl", db: Session = Depends(get_db)):
+    item = db.query(CmsMenu).filter_by(site=site, locale=locale, area=area).first()
+    if not item:
+        return []
+    rows = db.query(CmsMenuVersion).filter_by(menu_id=item.id).order_by(CmsMenuVersion.version.desc()).all()
+    return [{"id": row.id, "version": row.version, "items": row.items, "created_at": dt(row.created_at)} for row in rows]
+
+
+@router.post("/menus/{site}/{area}/rollback/{version_id}")
+def rollback_menu(site: str, area: str, version_id: int, locale: str = "nl", db: Session = Depends(get_db)):
+    item = db.query(CmsMenu).filter_by(site=site, locale=locale, area=area).first()
+    version = db.get(CmsMenuVersion, version_id)
+    if not item or not version or version.menu_id != item.id:
+        raise HTTPException(status_code=404, detail="Версію меню не знайдено")
+    item.draft_items = version.items
+    db.commit()
+    return {"ok": True}
 
 
 def post_out(item: CmsPost, full: bool = False) -> dict:
@@ -284,6 +346,27 @@ def publish_post(post_id: int, db: Session = Depends(get_db)):
     item.published_body = item.draft_body
     item.status = "published"
     item.published_at = datetime.now(timezone.utc)
+    db.commit()
+    return post_out(item, full=True)
+
+
+@router.get("/posts/{post_id}/versions")
+def post_versions(post_id: int, db: Session = Depends(get_db)):
+    rows = db.query(CmsPostVersion).filter_by(post_id=post_id).order_by(CmsPostVersion.version.desc()).all()
+    return [{"id": row.id, "version": row.version, "created_at": dt(row.created_at)} for row in rows]
+
+
+@router.post("/posts/{post_id}/rollback/{version_id}")
+def rollback_post(post_id: int, version_id: int, db: Session = Depends(get_db)):
+    item = db.get(CmsPost, post_id)
+    version = db.get(CmsPostVersion, version_id)
+    if not item or not version or version.post_id != item.id:
+        raise HTTPException(status_code=404, detail="Версію матеріалу не знайдено")
+    snapshot = version.snapshot
+    item.title = snapshot.get("title", item.title)
+    item.excerpt = snapshot.get("excerpt", "")
+    item.cover_url = snapshot.get("cover_url", "")
+    item.draft_body = clean_html(snapshot.get("body", ""))
     db.commit()
     return post_out(item, full=True)
 

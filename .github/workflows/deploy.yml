@@ -62,6 +62,15 @@ jobs:
             pip install --upgrade pip
             pip install -r backend/requirements.txt
 
+            if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+              echo "ERROR: Node.js and npm are required for the CMS frontend build."
+              echo "Install once: sudo apt install -y nodejs npm"
+              exit 1
+            fi
+
+            npm install --no-audit --no-fund --package-lock=false
+            npm run build
+
       - name: Restart services
         uses: appleboy/ssh-action@v1.2.0
         with:

@@ -1,4 +1,6 @@
 import { request } from "./api.js";
+import { handleCmsChange, handleCmsClick, handleCmsSubmit, mountCms, renderCms } from "./cms.js";
+import { ICONS } from "./icons.js";
 
 const app = document.querySelector("#app");
 const state = { user: null, toast: "" };
@@ -23,7 +25,7 @@ const NAV = [
   ["masters", "users", "Анкети майстрів"],
   ["companies", "building-2", "Компанії"],
   ["requests", "clipboard-list", "Заявки"],
-  ["texts", "languages", "Тексти сайтів"],
+  ["cms", ICONS.siteEditor, "Редактор сайтів"],
   ["settings", "settings", "Налаштування"],
 ];
 const EXTRA = [["messages", "messages-square", "Повідомлення"]];
@@ -361,38 +363,6 @@ async function messagesPage(id) {
   return shell(`<h1>Повідомлення менеджера</h1><p>Уся комунікація з компаніями йде через UHR.</p><div class="chat"><aside>${threads}</aside>${chat}</div>`, "messages");
 }
 
-async function textsPage(site = "ukrwerkspot", page = "coming_soon") {
-  const meta = await request("/admin/texts/meta");
-  const items = await request(`/admin/texts?site=${encodeURIComponent(site)}&page=${encodeURIComponent(page)}`);
-  const siteOptions = meta.sites
-    .map((item) => `<option value="${item.id}" ${item.id === site ? "selected" : ""}>${esc(item.label)}</option>`)
-    .join("");
-  const pageOptions = (meta.pages[site] || [])
-    .map((item) => `<option value="${item.id}" ${item.id === page ? "selected" : ""}>${esc(item.label)}</option>`)
-    .join("");
-  const fields = items
-    .map(
-      (item) => `<label class="full">
-        <span>${esc(item.label)} <span class="muted">${esc(item.key)}</span></span>
-        <textarea name="${item.id}" rows="${item.value.length > 80 ? 4 : 2}">${esc(item.value)}</textarea>
-      </label>`
-    )
-    .join("");
-  return shell(
-    `<h1>Тексти сайтів</h1>
-    <p>Заглушки ukrwerkspot.nl і uhrbv.nl беруть тексти звідси. Після збереження оновіть відкриту вкладку сайту.</p>
-    <form id="texts-nav" class="fields" style="margin-bottom:24px">
-      <label><span>Сайт</span><select name="site">${siteOptions}</select></label>
-      <label><span>Сторінка</span><select name="page">${pageOptions}</select></label>
-    </form>
-    <form id="texts-form" class="card">
-      <div class="fields">${fields || "<p>Для цієї сторінки ключів ще немає.</p>"}</div>
-      <button class="btn" style="margin-top:25px">Зберегти тексти</button>
-    </form>`,
-    "texts"
-  );
-}
-
 async function render() {
   const [page, arg, arg2] = route();
   if (!state.user) {
@@ -408,12 +378,8 @@ async function render() {
     else if (page === "requests" && arg) app.innerHTML = await requestDetail(arg);
     else if (page === "requests") app.innerHTML = await requestsPage();
     else if (page === "messages") app.innerHTML = await messagesPage(arg);
-    else if (page === "texts") {
-      const site = arg || "ukrwerkspot";
-      const defaultPage = "coming_soon";
-      app.innerHTML = await textsPage(site, arg2 || defaultPage);
-    }
     else if (page === "settings") app.innerHTML = await siteSettings();
+    else if (page === "cms") app.innerHTML = shell(await renderCms(arg, arg2, route()[3]), "cms");
     else app.innerHTML = await overview();
   } catch (error) {
     if (error.status === 401) {
@@ -424,6 +390,7 @@ async function render() {
     }
   }
   icons();
+  if (page === "cms") await mountCms(arg);
   window.scrollTo(0, 0);
 }
 
@@ -431,6 +398,11 @@ app.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   try {
+    if (await handleCmsSubmit(form)) {
+      toast("Зміни збережено.");
+      if (!["cms-new-page-form"].includes(form.id)) await render();
+      return;
+    }
     if (form.id === "login-form") {
       const data = new FormData(form);
       state.user = await request("/auth/login", {
@@ -471,15 +443,6 @@ app.addEventListener("submit", async (event) => {
       await render();
       return;
     }
-    if (form.id === "texts-form") {
-      const items = [...form.querySelectorAll("textarea[name]")].map((el) => ({
-        id: Number(el.name),
-        value: el.value,
-      }));
-      await request("/admin/texts", { method: "PUT", json: { items } });
-      toast("Тексти збережено. Ukrwerkspot покаже нову версію.");
-      return;
-    }
     if (form.classList.contains("site-settings-form")) {
       const isOpen = form.elements.is_open.checked;
       await request(`/admin/sites/${form.dataset.site}`, {
@@ -496,6 +459,12 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
+  try {
+    if (await handleCmsClick(event.target)) return;
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
   const preview = event.target.closest("[data-preview-site]");
   if (preview) {
     const popup = window.open("about:blank", "_blank");
@@ -518,21 +487,16 @@ app.addEventListener("click", async (event) => {
 });
 
 app.addEventListener("change", (event) => {
+  if (handleCmsChange(event.target)) return;
   if (event.target.id === "status-filter") {
     const value = event.target.value;
     location.hash = value ? `masters?status=${value}` : "masters";
     return;
   }
-  const nav = event.target.closest("#texts-nav");
-  if (nav) {
-    const data = new FormData(nav);
-    const site = data.get("site");
-    const pageName = event.target.name === "site" ? "coming_soon" : data.get("page");
-    location.hash = `texts/${site}/${pageName}`;
-  }
 });
 
 window.addEventListener("hashchange", render);
+window.addEventListener("cms-toast", (event) => toast(event.detail));
 
 try {
   state.user = await request("/auth/me");
