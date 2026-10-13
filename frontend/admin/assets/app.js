@@ -178,6 +178,23 @@ function fieldList(pairs) {
     .join("")}</div>`;
 }
 
+function documentsBlock(documents = []) {
+  if (!documents.length) return `<div class="card" style="margin:24px 0"><h3>Файли</h3><p>Файли не завантажено.</p></div>`;
+  const groups = {};
+  for (const doc of documents) (groups[doc.kind_label] ||= []).push(doc);
+  return `<div class="card" style="margin:24px 0"><h3>Файли</h3>${Object.entries(groups)
+    .map(
+      ([label, docs]) => `<h4>${esc(label)}</h4><div class="admin-documents">${docs
+        .map(
+          (doc) => `<a class="admin-document" href="${esc(doc.url)}" target="_blank" rel="noopener">${
+            doc.mime_type?.startsWith("image/") ? `<img src="${esc(doc.url)}" alt="" loading="lazy">` : icon(ICONS.document)
+          }<span>${esc(doc.original_name)}</span></a>`
+        )
+        .join("")}</div>`
+    )
+    .join("")}</div>`;
+}
+
 function statusForm(prefix, item) {
   return `<form id="status-form" class="card" data-prefix="${prefix}" data-id="${item.id}">
     <h3>Рішення менеджера</h3>
@@ -201,6 +218,9 @@ async function masterDetail(id) {
     ${fieldList([
       ["Телефон", item.phone],
       ["Email", item.email],
+      ["Перелік робіт", item.works],
+      ["Досвід роботи в Україні", item.experience_ua],
+      ["Досвід роботи в Нідерландах", item.experience_nl],
       ["Мова", item.language],
       ["Компанія", item.company_name],
       ["KVK", item.kvk],
@@ -219,6 +239,7 @@ async function masterDetail(id) {
       ["Портфоліо", item.portfolio_url],
     ])}
     <div class="card" style="margin:24px 0"><h3>Опис досвіду</h3><p>${esc(item.description || "—")}</p></div>
+    ${documentsBlock(item.documents)}
     ${statusForm("craftsmen", item)}`,
     "masters"
   );
@@ -266,6 +287,7 @@ async function companyDetail(id) {
       ["SNA", item.sna],
     ])}
     <div class="card" style="margin:24px 0"><h3>Опис компанії</h3><p>${esc(item.description || "—")}</p></div>
+    ${documentsBlock(item.documents)}
     ${statusForm("companies", item)}`,
     "companies"
   );

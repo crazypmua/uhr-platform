@@ -1,0 +1,43 @@
+@use "mixins" as *;
+
+.admin-documents {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 10px 0 20px;
+}
+
+.admin-document {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: inherit;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+
+  &:hover {
+    border-color: var(--green);
+  }
+
+  img {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .lucide {
+    width: 36px;
+    height: 36px;
+    color: var(--green);
+  }
+}
+
+@include mobile {
+  .admin-documents {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

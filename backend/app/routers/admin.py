@@ -1,13 +1,18 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..auth import create_preview_token, get_current_admin
 from ..config import settings
 from ..db import get_db
+from ..documents import kind_label
+from ..mailer import send_mail
 from ..models import Company, Craftsman, Document, Message, Request, SiteText, User
+from ..notifications import craftsman_approved
 from ..schemas import MessageIn, RequestStatusUpdate, SiteSettingsUpdate, StatusUpdate, TextsPut, d, dt
 from ..seed_texts import PAGES, SITES
 
@@ -45,7 +50,11 @@ def _docs(db: Session, owner_type: str, owner_id: int) -> list[dict]:
         {
             "id": row.id,
             "kind": row.kind,
+            "kind_label": kind_label(owner_type, row.kind),
             "original_name": row.original_name,
+            "mime_type": row.mime_type,
+            "size_bytes": row.size_bytes,
+            "url": f"/api/v1/admin/documents/{row.id}",
             "created_at": dt(row.created_at),
         }
         for row in rows
@@ -79,6 +88,9 @@ def _craftsman_out(item: Craftsman, db: Session, full: bool = False) -> dict:
             "instagram": item.instagram,
             "facebook": item.facebook,
             "tiktok": item.tiktok,
+            "works": item.works,
+            "experience_ua": item.experience_ua,
+            "experience_nl": item.experience_nl,
             "extra_work": item.extra_work,
             "experience_years": item.experience_years,
             "hourly_rate": float(item.hourly_rate) if item.hourly_rate is not None else None,
@@ -233,14 +245,40 @@ def craftsman_detail(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/craftsmen/{item_id}/status")
-def craftsman_status(item_id: int, payload: StatusUpdate, db: Session = Depends(get_db)):
+def craftsman_status(
+    item_id: int, payload: StatusUpdate, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     item = db.get(Craftsman, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Анкету не знайдено")
+    newly_approved = payload.status == "approved" and item.status != "approved"
     _apply_status(item, payload)
     db.commit()
     db.refresh(item)
+    if newly_approved:
+        background.add_task(send_mail, item.email, *craftsman_approved(item))
     return _craftsman_out(item, db, full=True)
+
+
+@router.get("/documents/{document_id}")
+def document_file(document_id: int, db: Session = Depends(get_db)):
+    row = db.get(Document, document_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Документ не знайдено")
+    path = Path(row.stored_path).resolve()
+    try:
+        path.relative_to(settings.private_uploads_path.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Документ не знайдено")
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Файл відсутній на сервері")
+    return FileResponse(
+        path,
+        media_type=row.mime_type or None,
+        filename=row.original_name,
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.get("/companies")

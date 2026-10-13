@@ -7,4 +7,5 @@ export const ICONS = Object.freeze({
   messages: "messages-square",
   settings: "settings",
   logout: "log-out",
+  document: "file-text",
 });

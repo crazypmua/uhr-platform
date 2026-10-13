@@ -52,7 +52,8 @@ jobs:
             git clean -fd \
               -e .env \
               -e .venv \
-              -e uploads
+              -e uploads \
+              -e private_uploads
 
             if [ ! -d .venv ]; then
               python3 -m venv .venv

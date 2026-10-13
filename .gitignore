@@ -10,6 +10,7 @@ frontend/admin/assets/vendor/grapesjs/
 frontend/uhrbv/preview/assets/cms-runtime.js
 frontend/ukrwerkspot/preview/assets/cms-runtime.js
 uploads/
+private_uploads/
 .idea/
 .vscode/
 *.log

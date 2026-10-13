@@ -122,10 +122,6 @@ def bootstrap_pages(site: str, user: User = Depends(get_current_admin), db: Sess
         raise HTTPException(status_code=404, detail="Сайт не знайдено")
     uk = site == "ukrwerkspot"
     defaults = [
-        ("home", "Головна" if uk else "Home",
-         f'<section class="hero"><div><div class="eyebrow">{"Українська майстерність. Нідерландські можливості." if uk else "Ukrainian expertise. Dutch ambition."}</div>'
-         f'<h1>{"Ваша майстерність. Наші можливості." if uk else "Goede mensen. Sterke projecten."}</h1>'
-         f'<p>{"Приєднуйтесь до бази перевірених майстрів." if uk else "Gekwalificeerde vakmensen voor de Nederlandse bouwsector."}</p></div></section>'),
         ("about", "Про нас" if uk else "Over UHR", '<section class="section"><h1>Про нас</h1><p>Додайте текст у візуальному редакторі.</p></section>'),
         ("contact", "Контакти" if uk else "Contact", '<section class="section"><h1>Контакти</h1><p>Додайте контактні дані.</p></section>'),
         ("faq", "Поширені питання" if uk else "FAQ", '<section class="section"><h1>FAQ</h1><details><summary>Питання</summary><p>Відповідь</p></details></section>'),

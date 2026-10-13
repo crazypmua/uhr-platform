@@ -85,9 +85,12 @@ class CmsCategorySave(BaseModel):
 
 
 class CraftsmanApplication(BaseModel):
-    name: str
-    phone: str
+    name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=64)
     email: EmailStr
+    works: str = ""
+    experience_ua: str = Field(default="", max_length=255)
+    experience_nl: str = Field(default="", max_length=255)
     language: str = "Українська"
     company_name: str = ""
     kvk: str = ""
@@ -110,7 +113,7 @@ class CraftsmanApplication(BaseModel):
 
 
 class CompanyApplication(BaseModel):
-    company_name: str
+    company_name: str = Field(min_length=1, max_length=255)
     kvk: str = ""
     btw: str = ""
     address: str = ""

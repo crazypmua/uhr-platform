@@ -121,7 +121,9 @@ export async function renderCmsPage() {
       return false;
     }
   }
-  const slug = parts.join("/") || "home";
+  // The root path belongs to the app (hash routes #catalog, #login...), CMS pages live on their own paths
+  if (!parts.length) return false;
+  const slug = parts.join("/");
   try {
     const page = await json(`${API}/pages/${site}/${encodeURIComponent(slug)}`);
     const app = document.querySelector("#app");
