@@ -466,7 +466,7 @@ async function messagesPage(id) {
       })
       .join("") || `<div class="admin-thread-empty">Немає діалогів. Вони з’являться після заявок компаній.</div>`;
   const opened = data.current;
-  const company = data.threads.find((item) => String(item.id) === String(opened.id));
+  const company = opened ? data.threads.find((item) => String(item.id) === String(opened.id)) : null;
   const chat = opened
     ? `<header class="admin-thread-head">
         <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
