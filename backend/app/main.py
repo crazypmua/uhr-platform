@@ -73,6 +73,15 @@ ADMIN_SHARED_FILES = {"styles.css", "workspace.css", "contrast.css"}
 ADMIN_SHARED_DIRS = ("images/", "vendor/")
 
 
+def _cache_headers(file: Path) -> dict | None:
+    if file.name == "index.html":
+        return {"Cache-Control": "no-store, max-age=0"}
+    # Scripts and styles keep their URLs between deploys, so the browser must revalidate them (304 if unchanged)
+    if file.suffix in {".js", ".css"}:
+        return {"Cache-Control": "no-cache"}
+    return None
+
+
 def _shared_asset(path: str) -> Path | None:
     if not path.startswith("assets/"):
         return None
@@ -91,7 +100,7 @@ def admin_asset(path: str):
         found = _safe_file(shared_dir, path)
     if not found:
         raise HTTPException(status_code=404)
-    return FileResponse(found)
+    return FileResponse(found, headers=_cache_headers(found))
 
 
 if uploads.exists():
@@ -142,7 +151,4 @@ def site_frontend(path: str, request: Request):
     if not requested and full_site and path:
         requested = _shared_asset(path)
     response_file = requested or frontend_dir / "index.html"
-    headers = None
-    if response_file.name == "index.html":
-        headers = {"Cache-Control": "no-store, max-age=0"}
-    return FileResponse(response_file, headers=headers)
+    return FileResponse(response_file, headers=_cache_headers(response_file))

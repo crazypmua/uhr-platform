@@ -10,6 +10,7 @@ from ..models import (
     CmsPageVersion,
     CmsPost,
     Craftsman,
+    Document,
 )
 from ..schemas import dt
 
@@ -93,6 +94,14 @@ def catalog(site: str, db: Session = Depends(get_db)):
         .all()
     )
     workers = db.query(Craftsman).filter(Craftsman.published.is_(True)).order_by(Craftsman.id.desc()).all()
+    with_vca = {
+        row.owner_id
+        for row in db.query(Document.owner_id).filter(
+            Document.owner_type == "craftsman",
+            Document.kind == "vca",
+            Document.owner_id.in_([item.id for item in workers]),
+        )
+    }
     return {
         "categories": [{
             "slug": item.slug, "title": item.title, "profession": item.profession,
@@ -108,6 +117,9 @@ def catalog(site: str, db: Session = Depends(get_db)):
             "availability": item.availability,
             "nationwide": item.nationwide,
             "description": item.description,
+            "works": item.works,
             "portfolio_url": item.portfolio_url,
+            "provider_type": "company" if item.company_name else "individual",
+            "certificates": ["VCA"] if item.id in with_vca else [],
         } for item in workers],
     }
