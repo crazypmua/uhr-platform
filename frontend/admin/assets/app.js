@@ -18,6 +18,9 @@ const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const icons = () => window.lucide?.createIcons({ attrs: { "stroke-width": 1.7, "aria-hidden": "true" } });
 const route = () => ((location.hash.slice(1) || "overview").split("?")[0] || "overview").split("/");
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("uk-UA") : "—");
+const fmtTime = (iso) =>
+  iso ? new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+const PAGE_SIZE = 10;
 const badgeClass = (status) => (status === "approved" || status === "confirmed" || status === "done" ? "" : "yellow");
 
 const NAV = [
@@ -44,6 +47,76 @@ function shell(content, page) {
       </div>
     </aside>
     <main class="content admin-main">${content}</main>
+  </div>`;
+}
+
+function paint(content, page) {
+  const layout = document.querySelector(".admin-layout");
+  const main = layout?.querySelector(".admin-main");
+  if (!layout || !main) {
+    app.innerHTML = shell(content, page);
+    return;
+  }
+  main.innerHTML = content;
+  main.scrollTop = 0;
+  layout.querySelectorAll(".admin-nav a").forEach((link) => {
+    const active = link.getAttribute("href") === `#${page}`;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+function pageParams() {
+  return new URLSearchParams(location.hash.split("?")[1] || "");
+}
+
+function currentPage() {
+  const value = Number(pageParams().get("page") || 1);
+  return Number.isInteger(value) && value > 0 ? value : 1;
+}
+
+function pageHref(path, page, extra = {}) {
+  const params = new URLSearchParams();
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return `#${path}${query ? `?${query}` : ""}`;
+}
+
+function slicePage(items) {
+  const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE) || 1);
+  const page = Math.min(currentPage(), pages);
+  const start = (page - 1) * PAGE_SIZE;
+  return { page, pages, total: items.length, rows: items.slice(start, start + PAGE_SIZE), start };
+}
+
+function pageNote(meta) {
+  if (!meta.total) return "";
+  const from = meta.start + 1;
+  const to = meta.start + meta.rows.length;
+  return `<p class="admin-count">${from}–${to} з ${meta.total}</p>`;
+}
+
+function pager(path, meta, extra = {}) {
+  if (meta.pages < 2) return "";
+  const item = (n, label, current = false) =>
+    current
+      ? `<span class="admin-page is-current" aria-current="page">${label}</span>`
+      : `<a class="admin-page" href="${pageHref(path, n, extra)}">${label}</a>`;
+  const links = [];
+  for (let n = 1; n <= meta.pages; n += 1) links.push(item(n, String(n), n === meta.page));
+  const prev = meta.page > 1 ? item(meta.page - 1, "Назад") : `<span class="admin-page is-disabled">Назад</span>`;
+  const next = meta.page < meta.pages ? item(meta.page + 1, "Далі") : `<span class="admin-page is-disabled">Далі</span>`;
+  return `<nav class="admin-pager" aria-label="Сторінки">${prev}${links.join("")}${next}</nav>`;
+}
+
+function rowActions(href, api, id, label) {
+  return `<div class="admin-actions">
+    <a class="admin-icon-btn" href="${href}" aria-label="Редагувати">${icon(ICONS.edit)}</a>
+    <button class="admin-icon-btn is-danger" type="button" data-delete="${api}" data-id="${id}" data-label="${esc(label)}" aria-label="Видалити">${icon(ICONS.trash)}</button>
   </div>`;
 }
 
@@ -76,7 +149,7 @@ function loginPage(error = "") {
 
 function statusFilter(current, extra = []) {
   const options = [["", "Усі статуси"], ["pending", "На перевірці"], ["clarification", "Уточнення"], ["approved", "Схвалено"], ["rejected", "Відхилено"], ...extra];
-  return `<select id="status-filter" style="max-width:260px;margin-bottom:20px">${options
+  return `<select id="status-filter" class="admin-filter">${options
     .map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`)
     .join("")}</select>`;
 }
@@ -89,19 +162,19 @@ async function overview() {
     ["Активні заявки", data.active_requests, "#requests", "Планування та узгодження з компаніями."],
     ["Опубліковані профілі", data.published_profiles, "#masters", "Обезличені профілі для каталогу UHR."],
   ];
-  return shell(`
+  return `
     <div class="eyebrow">Єдина екосистема · два домени</div>
     <h1>Центр управління UHR</h1>
     <p>Ukrwerkspot збирає анкети майстрів. UHR приймає компанії. Тексти Ukrwerkspot редагуються тут.</p>
     <div class="stats">${cards
-      .map(([label, value]) => `<div class="card">${esc(label)}<strong>${esc(value)}</strong>Overzicht</div>`)
+      .map(([label, value]) => `<div class="card">${esc(label)}<strong>${esc(value)}</strong></div>`)
       .join("")}</div>
     <div class="grid">${cards
       .map(
         ([label, , href, text]) =>
           `<a class="card" href="${href}"><h3>${esc(label)} ↗</h3><p>${esc(text)}</p></a>`
       )
-      .join("")}</div>`, "overview");
+      .join("")}</div>`;
 }
 
 async function siteSettings() {
@@ -129,44 +202,40 @@ async function siteSettings() {
       </form>`
     )
     .join("");
-  return shell(
-    `<h1>Відкрити або закрити сайти</h1>
+  return `<h1>Відкрити або закрити сайти</h1>
     <p>У закритому режимі звичайний відвідувач бачить заглушку. Кнопка перегляду відкриває повний сайт тільки для адміністратора.</p>
     <div class="grid">${cards}</div>
-    <div class="note">Доступ до закритого Ukrwerkspot передається окремою захищеною cookie на 1 годину, тому що браузер не дозволяє спільну cookie для двох різних доменів.</div>`,
-    "settings"
-  );
+    <div class="note">Доступ до закритого Ukrwerkspot передається окремою захищеною cookie на 1 годину, тому що браузер не дозволяє спільну cookie для двох різних доменів.</div>`;
 }
 
 function table(headers, rows) {
   if (!rows.length) return `<div class="card empty">Поки що немає записів.</div>`;
   return `<div class="card table-scroll"><table>
-    <thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+    <thead><tr>${headers.map((h) => `<th${h === "Дії" ? ' class="admin-actions-col"' : ""}>${h}</th>`).join("")}</tr></thead>
     <tbody>${rows.join("")}</tbody>
   </table></div>`;
 }
 
 async function masters() {
-  const status = new URLSearchParams(location.hash.split("?")[1] || "").get("status") || "";
+  const status = pageParams().get("status") || "";
   const items = await request("/admin/craftsmen" + (status ? `?status=${encodeURIComponent(status)}` : ""));
-  const rows = items.map(
+  const meta = slicePage(items);
+  const rows = meta.rows.map(
     (item) => `<tr>
-      <td><a href="#masters/${item.id}">#${item.id} ↗</a></td>
+      <td><a href="#masters/${item.id}">#${item.id}</a></td>
       <td>${esc(item.name)}</td>
       <td>${esc(item.profession)}</td>
       <td>${esc(item.city)}</td>
       <td>${esc(item.source)}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
       <td>${fmtDate(item.created_at)}</td>
+      <td>${rowActions(`#masters/${item.id}`, "craftsmen", item.id, item.name)}</td>
     </tr>`
   );
-  return shell(
-    `<h1>Перевірка майстрів</h1><p>Анкети з Ukrwerkspot. Після схвалення публікується лише професійний профіль без імені та контактів.</p>${statusFilter(status)}${table(
-      ["ID", "Ім’я", "Спеціалізація", "Місто", "Джерело", "Статус", "Дата"],
-      rows
-    )}`,
-    "masters"
-  );
+  return `<h1>Перевірка майстрів</h1><p>Анкети з Ukrwerkspot. Після схвалення публікується лише професійний профіль без імені та контактів.</p>${statusFilter(status)}${pageNote(meta)}${table(
+    ["ID", "Ім’я", "Спеціалізація", "Місто", "Джерело", "Статус", "Дата", "Дії"],
+    rows
+  )}${pager("masters", meta, { status })}`;
 }
 
 function fieldList(pairs) {
@@ -242,8 +311,7 @@ function statusForm(prefix, item) {
 
 async function masterDetail(id) {
   const item = await request(`/admin/craftsmen/${id}`);
-  return shell(
-    `<a href="#masters" class="back-link">${icon("arrow-left")} До анкет</a>
+  return `<a href="#masters" class="back-link">${icon("arrow-left")} До анкет</a>
     <div class="eyebrow">Ukrwerkspot · анкета #${item.id}</div>
     <h1>${esc(item.name || "Без імені")}</h1>
     <p>${esc(item.profession)} · ${esc(item.city)} · ${esc(item.status_label)}</p>
@@ -272,36 +340,32 @@ async function masterDetail(id) {
     ])}
     <div class="card" style="margin:24px 0"><h3>Опис досвіду</h3><p>${esc(item.description || "—")}</p></div>
     ${documentsBlock(item.documents)}
-    ${statusForm("craftsmen", item)}`,
-    "masters"
-  );
+    ${statusForm("craftsmen", item)}`;
 }
 
 async function companies() {
   const items = await request("/admin/companies");
-  const rows = items.map(
+  const meta = slicePage(items);
+  const rows = meta.rows.map(
     (item) => `<tr>
-      <td><a href="#companies/${item.id}">#${item.id} ↗</a></td>
+      <td><a href="#companies/${item.id}">#${item.id}</a></td>
       <td>${esc(item.company_name)}</td>
       <td>${esc(item.contact_name)}</td>
       <td>${esc(item.source)}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
       <td>${fmtDate(item.created_at)}</td>
+      <td>${rowActions(`#companies/${item.id}`, "companies", item.id, item.company_name)}</td>
     </tr>`
   );
-  return shell(
-    `<h1>Перевірка компаній</h1><p>Реєстрації з uhrbv.nl. Після перевірки компанія отримає доступ до каталогу.</p>${table(
-      ["ID", "Компанія", "Контакт", "Джерело", "Статус", "Дата"],
-      rows
-    )}`,
-    "companies"
-  );
+  return `<h1>Перевірка компаній</h1><p>Реєстрації з uhrbv.nl. Після перевірки компанія отримає доступ до каталогу.</p>${pageNote(meta)}${table(
+    ["ID", "Компанія", "Контакт", "Джерело", "Статус", "Дата", "Дії"],
+    rows
+  )}${pager("companies", meta)}`;
 }
 
 async function companyDetail(id) {
   const item = await request(`/admin/companies/${id}`);
-  return shell(
-    `<a href="#companies" class="back-link">${icon("arrow-left")} До компаній</a>
+  return `<a href="#companies" class="back-link">${icon("arrow-left")} До компаній</a>
     <div class="eyebrow">UHR · компанія #${item.id}</div>
     <h1>${esc(item.company_name)}</h1>
     ${fieldList([
@@ -321,30 +385,27 @@ async function companyDetail(id) {
     <div class="card" style="margin:24px 0"><h3>Коментар компанії</h3><p>${esc(item.description || "—")}</p></div>
     ${snaBlock(item)}
     ${documentsBlock(item.documents)}
-    ${statusForm("companies", item)}`,
-    "companies"
-  );
+    ${statusForm("companies", item)}`;
 }
 
 async function requestsPage() {
   const items = await request("/admin/requests");
-  const rows = items.map(
+  const meta = slicePage(items);
+  const rows = meta.rows.map(
     (item) => `<tr>
-      <td><a href="#requests/${item.id}">${esc(item.public_id)} ↗</a></td>
+      <td><a href="#requests/${item.id}">${esc(item.public_id)}</a></td>
       <td>${esc(item.project)}</td>
       <td>${esc(item.company_name)}</td>
       <td>${esc(item.profession)}</td>
       <td>${esc(item.start_date || "—")}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
+      <td>${rowActions(`#requests/${item.id}`, "requests", item.id, item.public_id)}</td>
     </tr>`
   );
-  return shell(
-    `<h1>Заявки компаній</h1><p>Concept → Ingediend → In behandeling → Kandidaat geselecteerd → Bevestigd → Afgerond / Geannuleerd</p>${table(
-      ["Заявка", "Проєкт", "Компанія", "Спеціалізація", "Старт", "Статус"],
-      rows
-    )}`,
-    "requests"
-  );
+  return `<h1>Заявки компаній</h1><p>Concept → Ingediend → In behandeling → Kandidaat geselecteerd → Bevestigd → Afgerond / Geannuleerd</p>${pageNote(meta)}${table(
+    ["Заявка", "Проєкт", "Компанія", "Спеціалізація", "Старт", "Статус", "Дії"],
+    rows
+  )}${pager("requests", meta)}`;
 }
 
 async function requestDetail(id) {
@@ -357,8 +418,7 @@ async function requestDetail(id) {
     ["done", "Afgerond"],
     ["cancelled", "Geannuleerd"],
   ];
-  return shell(
-    `<a href="#requests" class="back-link">${icon("arrow-left")} До заявок</a>
+  return `<a href="#requests" class="back-link">${icon("arrow-left")} До заявок</a>
     <h1>Заявка ${esc(item.public_id)}</h1>
     <p>${esc(item.company?.company_name || "")} · ${esc(item.status_label)}</p>
     ${fieldList([
@@ -377,40 +437,50 @@ async function requestDetail(id) {
         .join("")}</select></label>
       <button class="btn" style="margin-top:20px">Оновити статус</button>
     </form>
-    <p style="margin-top:24px"><a class="btn light" href="#messages/${item.id}">Перейти до повідомлень ↗</a></p>`,
-    "requests"
-  );
+    <p style="margin-top:24px"><a class="btn light" href="#messages/${item.id}">Перейти до повідомлень ↗</a></p>`;
 }
 
 async function messagesPage(id) {
   const data = await request("/admin/messages" + (id ? `?request_id=${id}` : ""));
-  const threads = data.threads
-    .map(
-      (item) => `<a class="card" href="#messages/${item.id}" style="display:block;margin-bottom:12px">
-        <h3>${esc(item.public_id)} · ${esc(item.project || "Без назви")}</h3>
-        <p>${esc(item.company_name)}</p>
-        <span class="muted">${esc(item.last_message || "Немає повідомлень")}</span>
-      </a>`
-    )
-    .join("") || `<div class="card empty">Немає діалогів. Вони з’являться після заявок компаній.</div>`;
-  const chat = data.current
-    ? `<div class="card">
-        <h3>${esc(data.current.public_id)} · ${esc(data.current.project)}</h3>
+  const threads =
+    data.threads
+      .map((item) => {
+        const active = String(data.current?.id) === String(item.id);
+        return `<a class="admin-thread${active ? " is-active" : ""}" href="#messages/${item.id}">
+          <strong>${esc(item.public_id)} · ${esc(item.project || "Без назви")}</strong>
+          <span>${esc(item.company_name || "Компанію не вказано")}</span>
+          <p>${esc(item.last_message || "Немає повідомлень")}</p>
+          <em>${fmtTime(item.updated_at)}</em>
+        </a>`;
+      })
+      .join("") || `<div class="admin-thread-empty">Немає діалогів. Вони з’являться після заявок компаній.</div>`;
+  const opened = data.current;
+  const company = data.threads.find((item) => String(item.id) === String(opened.id));
+  const chat = opened
+    ? `<header class="admin-thread-head">
+        <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
+        <a href="#requests/${opened.id}">Заявка</a>
+      </header>
+      <div class="admin-bubbles">
         ${
-          data.current.messages
+          opened.messages
             .map(
-              (msg) =>
-                `<div class="bubble ${msg.sender_role === "admin" ? "mine" : ""}">${esc(msg.body)}<div class="muted">${fmtDate(msg.created_at)}</div></div>`
+              (msg) => `<article class="admin-bubble${msg.sender_role === "admin" ? " is-mine" : ""}">
+                <p>${esc(msg.body)}</p><time>${fmtTime(msg.created_at)}</time>
+              </article>`
             )
-            .join("") || `<div class="note">Повідомлень ще немає.</div>`
+            .join("") || `<div class="admin-thread-empty">Повідомлень ще немає.</div>`
         }
-        <form id="chat-form" class="actions" data-id="${data.current.id}">
-          <input name="message" aria-label="Повідомлення" placeholder="Написати повідомлення…" required style="flex:1">
-          <button class="btn">Надіслати →</button>
-        </form>
-      </div>`
-    : `<div class="card empty">Оберіть заявку зліва.</div>`;
-  return shell(`<h1>Повідомлення менеджера</h1><p>Уся комунікація з компаніями йде через UHR.</p><div class="chat"><aside>${threads}</aside>${chat}</div>`, "messages");
+      </div>
+      <form id="chat-form" class="admin-composer" data-id="${opened.id}">
+        <textarea name="message" aria-label="Повідомлення" placeholder="Написати повідомлення…" required></textarea>
+        <button class="btn">Надіслати</button>
+      </form>`
+    : `<div class="admin-thread-empty"><p>Оберіть заявку зі списку зліва.</p></div>`;
+  return `<div class="admin-fill">
+    <h1>Повідомлення</h1>
+    <div class="admin-inbox"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section></div>
+  </div>`;
 }
 
 async function render() {
@@ -421,27 +491,33 @@ async function render() {
     return;
   }
   try {
-    if (page === "masters" && arg) app.innerHTML = await masterDetail(arg);
-    else if (page === "masters") app.innerHTML = await masters();
-    else if (page === "companies" && arg) app.innerHTML = await companyDetail(arg);
-    else if (page === "companies") app.innerHTML = await companies();
-    else if (page === "requests" && arg) app.innerHTML = await requestDetail(arg);
-    else if (page === "requests") app.innerHTML = await requestsPage();
-    else if (page === "messages") app.innerHTML = await messagesPage(arg);
-    else if (page === "settings") app.innerHTML = await siteSettings();
-    else if (page === "cms") app.innerHTML = shell(await renderCms(arg, arg2, route()[3]), "cms");
-    else app.innerHTML = await overview();
+    let content = "";
+    let active = page;
+    if (page === "masters" && arg) content = await masterDetail(arg);
+    else if (page === "masters") content = await masters();
+    else if (page === "companies" && arg) content = await companyDetail(arg);
+    else if (page === "companies") content = await companies();
+    else if (page === "requests" && arg) content = await requestDetail(arg);
+    else if (page === "requests") content = await requestsPage();
+    else if (page === "messages") content = await messagesPage(arg);
+    else if (page === "settings") content = await siteSettings();
+    else if (page === "cms") content = await renderCms(arg, arg2, route()[3]);
+    else {
+      content = await overview();
+      active = "overview";
+    }
+    paint(content, active);
   } catch (error) {
     if (error.status === 401) {
       state.user = null;
       app.innerHTML = loginPage("Сесію закінчено. Увійдіть знову.");
     } else {
-      app.innerHTML = shell(`<div class="card empty"><h1>Помилка</h1><p>${esc(error.message)}</p></div>`, page);
+      paint(`<div class="card empty"><h1>Помилка</h1><p>${esc(error.message)}</p></div>`, page);
     }
   }
   icons();
+  document.querySelector(".admin-bubbles")?.scrollTo(0, 99999);
   if (page === "cms") await mountCms(arg);
-  window.scrollTo(0, 0);
 }
 
 app.addEventListener("submit", async (event) => {
@@ -525,6 +601,24 @@ app.addEventListener("click", async (event) => {
       else window.location.href = data.url;
     } catch (error) {
       popup?.close();
+      toast(error.message);
+    }
+    return;
+  }
+  const remove = event.target.closest("[data-delete]");
+  if (remove) {
+    event.preventDefault();
+    const kind = { craftsmen: "анкету", companies: "компанію", requests: "заявку" }[remove.dataset.delete] || "запис";
+    const extra = remove.dataset.delete === "companies" ? " Заявки цієї компанії теж буде видалено." : "";
+    if (!confirm(`Видалити ${kind} «${remove.dataset.label}»?${extra} Цю дію не можна скасувати.`)) return;
+    try {
+      await request(`/admin/${remove.dataset.delete}/${remove.dataset.id}`, { method: "DELETE" });
+      toast("Запис видалено.");
+      const [section, detail] = route();
+      const list = section === "masters" || section === "companies" || section === "requests" ? section : "overview";
+      if (detail) location.hash = list;
+      else await render();
+    } catch (error) {
       toast(error.message);
     }
     return;

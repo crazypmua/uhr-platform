@@ -8,4 +8,6 @@ export const ICONS = Object.freeze({
   settings: "settings",
   logout: "log-out",
   document: "file-text",
+  edit: "pencil",
+  trash: "trash-2",
 });

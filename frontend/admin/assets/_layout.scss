@@ -5,10 +5,13 @@ $sidebar-width: 260px;
 .admin-layout {
   display: grid;
   grid-template-columns: $sidebar-width minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 
   @include mobile {
     display: block;
+    height: auto;
+    overflow: visible;
   }
 }
 
@@ -102,5 +105,277 @@ $sidebar-width: 260px;
 }
 
 .admin-main {
-  min-height: 100vh;
+  height: 100vh;
+  min-width: 0;
+  overflow: auto;
+
+  h1 {
+    font-size: 32px;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+
+  .table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  td:has(.admin-actions),
+  .admin-actions-col {
+    width: 96px;
+    text-align: right;
+  }
+
+  @include mobile {
+    height: auto;
+    overflow: visible;
+  }
+}
+
+.admin-main:has(.admin-fill) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-filter {
+  max-width: 260px;
+  margin: 0 0 16px;
+}
+
+.admin-count {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.admin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--green);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+
+  .lucide {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover {
+    background: var(--cream);
+  }
+
+  &.is-danger {
+    color: #8d3a32;
+  }
+}
+
+.admin-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.admin-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+
+  &.is-current {
+    color: #fff;
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  &.is-disabled {
+    color: var(--muted);
+  }
+}
+
+.admin-fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.admin-inbox {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+
+  @include mobile {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 70vh;
+  }
+}
+
+.admin-threads {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+
+  @include mobile {
+    max-height: 240px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.admin-thread {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+
+  strong {
+    font-size: 14px;
+  }
+
+  span,
+  em,
+  p {
+    margin: 0;
+    font-size: 12px;
+    font-style: normal;
+    color: var(--muted);
+  }
+
+  p {
+    margin-top: 4px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &:hover,
+  &.is-active {
+    background: #edf2e5;
+  }
+}
+
+.admin-conversation {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.admin-thread-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+
+  strong,
+  span {
+    display: block;
+  }
+
+  span {
+    font-size: 12px;
+    color: var(--muted);
+  }
+}
+
+.admin-bubbles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+  background: #f7f8f4;
+
+  @include mobile {
+    min-height: 280px;
+  }
+}
+
+.admin-bubble {
+  max-width: min(460px, 85%);
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 12px 4px;
+
+  p {
+    margin: 0;
+    color: inherit;
+    overflow-wrap: anywhere;
+  }
+
+  time {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  &.is-mine {
+    align-self: flex-end;
+    background: #e7f0df;
+    border-color: #d5e3c8;
+    border-radius: 12px 12px 4px 12px;
+  }
+}
+
+.admin-thread-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.admin-composer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+
+  textarea {
+    flex: 1;
+    min-height: 46px;
+    max-height: 140px;
+    resize: vertical;
+  }
+
+  .btn {
+    flex: none;
+  }
 }

@@ -11,7 +11,7 @@ from ..config import settings
 from ..db import get_db
 from ..documents import kind_label
 from ..mailer import send_mail
-from ..models import Company, Craftsman, Document, Message, Request, SiteText, User
+from ..models import Company, CompanyAccount, CompanyFavorite, Craftsman, Document, Message, Request, SiteText, User
 from ..notifications import company_approved, craftsman_approved
 from ..schemas import MessageIn, RequestStatusUpdate, SiteSettingsUpdate, StatusUpdate, TextsPut, d, dt
 from ..seed_texts import PAGES, SITES
@@ -59,6 +59,32 @@ def _docs(db: Session, owner_type: str, owner_id: int) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def _purge_documents(db: Session, owner_type: str, owner_id: int) -> None:
+    rows = db.query(Document).filter(Document.owner_type == owner_type, Document.owner_id == owner_id).all()
+    root = settings.private_uploads_path.resolve()
+    for row in rows:
+        path = Path(row.stored_path).resolve()
+        try:
+            path.relative_to(root)
+            if path.is_file():
+                path.unlink()
+        except (ValueError, OSError):
+            pass
+        db.delete(row)
+    folder = root / owner_type / str(owner_id)
+    try:
+        folder.rmdir()
+    except OSError:
+        pass
+
+
+def _delete_requests(db: Session, ids: list[int]) -> None:
+    if not ids:
+        return
+    db.query(Message).filter(Message.request_id.in_(ids)).delete(synchronize_session=False)
+    db.query(Request).filter(Request.id.in_(ids)).delete(synchronize_session=False)
 
 
 def _craftsman_out(item: Craftsman, db: Session, full: bool = False) -> dict:
@@ -262,6 +288,21 @@ def craftsman_status(
     return _craftsman_out(item, db, full=True)
 
 
+@router.delete("/craftsmen/{item_id}")
+def delete_craftsman(item_id: int, db: Session = Depends(get_db)):
+    item = db.get(Craftsman, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Анкету не знайдено")
+    db.query(Request).filter(Request.craftsman_id == item.id).update(
+        {Request.craftsman_id: None}, synchronize_session=False
+    )
+    db.query(CompanyFavorite).filter(CompanyFavorite.craftsman_id == item.id).delete(synchronize_session=False)
+    _purge_documents(db, "craftsman", item.id)
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/documents/{document_id}")
 def document_file(document_id: int, db: Session = Depends(get_db)):
     row = db.get(Document, document_id)
@@ -313,6 +354,23 @@ def company_status(
     if newly_approved:
         background.add_task(send_mail, item.email, *company_approved(item))
     return _company_out(item, db, full=True)
+
+
+@router.delete("/companies/{item_id}")
+def delete_company(item_id: int, db: Session = Depends(get_db)):
+    item = db.get(Company, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Компанію не знайдено")
+    request_ids = [row for (row,) in db.query(Request.id).filter(Request.company_id == item.id).all()]
+    _delete_requests(db, request_ids)
+    db.query(CompanyFavorite).filter(CompanyFavorite.company_id == item.id).delete(synchronize_session=False)
+    db.query(CompanyAccount).filter(CompanyAccount.company_id == item.id).update(
+        {CompanyAccount.company_id: None}, synchronize_session=False
+    )
+    _purge_documents(db, "company", item.id)
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/requests")
@@ -381,6 +439,17 @@ def request_status(item_id: int, payload: RequestStatusUpdate, db: Session = Dep
     item.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True, "status": item.status}
+
+
+@router.delete("/requests/{item_id}")
+def delete_request(item_id: int, db: Session = Depends(get_db)):
+    item = db.get(Request, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Заявку не знайдено")
+    db.expunge(item)
+    _delete_requests(db, [item_id])
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/messages")
