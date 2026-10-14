@@ -23,6 +23,7 @@ from ..auth import (
 from ..config import settings
 from ..db import get_db
 from ..documents import kind_label, read_uploads
+from ..inbox import publish
 from ..mailer import send_mail
 from ..models import (
     Company,
@@ -564,10 +565,13 @@ def contact_about_selection(
         db.flush()
         item.public_id = f"A-{2000 + item.id}"
     picks = _sync_selection(db, item, company)
-    db.add(Message(request_id=item.id, sender_role="company", body=body, created_at=now))
+    msg = Message(request_id=item.id, sender_role="company", body=body, created_at=now)
+    db.add(msg)
     item.updated_at = now
     db.commit()
     db.refresh(item)
+    db.refresh(msg)
+    _notify_admin(item, msg)
     emailed = False
     if channel == "email" and settings.smtp_host and settings.smtp_from:
         lines = "\n".join(f"#{row.id} · {row.profession} · {row.city}" for row in picks)
@@ -595,8 +599,26 @@ def company_message(
     if not body:
         raise HTTPException(status_code=422, detail="Schrijf een bericht")
     now = datetime.now(timezone.utc)
-    db.add(Message(request_id=item.id, sender_role="company", body=body, created_at=now))
+    msg = Message(request_id=item.id, sender_role="company", body=body, created_at=now)
+    db.add(msg)
     item.updated_at = now
     db.commit()
     db.refresh(item)
+    db.refresh(msg)
+    _notify_admin(item, msg)
     return _request_out(item, db)
+
+
+def _notify_admin(item: WorkRequest, msg: Message) -> None:
+    publish(
+        {
+            "type": "message",
+            "request_id": item.id,
+            "message_id": msg.id,
+            "sender_role": msg.sender_role,
+            "body": msg.body,
+            "public_id": item.public_id,
+            "project": item.project or "",
+            "company_name": item.company.company_name if item.company else "",
+        }
+    )

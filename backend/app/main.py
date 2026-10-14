@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .auth import has_admin_session, has_preview_access
 from .config import ROOT, settings
 from .db import SessionLocal
+from .inbox import bind_loop
 from .models import SiteText
 from .routers import admin, auth, cms_admin, cms_public, company, public
 from .seed import ensure_admin, ensure_texts
@@ -16,6 +17,7 @@ from .seed import ensure_admin, ensure_texts
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    bind_loop()
     settings.uploads_path.mkdir(parents=True, exist_ok=True)
     db = SessionLocal()
     try:

@@ -1,8 +1,10 @@
+import asyncio
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request as HttpRequest
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -11,11 +13,14 @@ from ..auth import create_preview_token, get_current_admin
 from ..config import settings
 from ..db import get_db
 from ..documents import kind_label
+from ..inbox import close as close_inbox
+from ..inbox import listen as listen_inbox
 from ..mailer import send_mail
 from ..models import (
     Company,
     CompanyAccount,
     CompanyFavorite,
+    CompanyPick,
     Craftsman,
     Document,
     Message,
@@ -464,19 +469,72 @@ def delete_request(item_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-def _selection_profiles(db: Session, request_id: int) -> list[dict]:
+def _people(rows) -> list[dict]:
+    return [{"id": row.id, "profession": row.profession, "city": row.city or ""} for row in rows]
+
+
+def _selection_profiles(db: Session, item: Request) -> list[dict]:
     try:
         rows = (
-            db.query(Craftsman.id, Craftsman.profession, Craftsman.city)
+            db.query(Craftsman)
             .join(RequestSelection, RequestSelection.craftsman_id == Craftsman.id)
-            .filter(RequestSelection.request_id == request_id)
+            .filter(RequestSelection.request_id == item.id)
             .order_by(Craftsman.id)
             .all()
         )
     except ProgrammingError:
         db.rollback()
-        return []
-    return [{"id": row.id, "profession": row.profession, "city": row.city or ""} for row in rows]
+        rows = []
+    if rows:
+        return _people(rows)
+    if item.project == "Selectie" and item.company_id:
+        try:
+            rows = (
+                db.query(Craftsman)
+                .join(CompanyPick, CompanyPick.craftsman_id == Craftsman.id)
+                .filter(CompanyPick.company_id == item.company_id, Craftsman.published.is_(True))
+                .order_by(CompanyPick.created_at)
+                .all()
+            )
+        except ProgrammingError:
+            db.rollback()
+            rows = []
+        if rows:
+            return _people(rows)
+    if item.craftsman_id:
+        craftsman = db.get(Craftsman, item.craftsman_id)
+        if craftsman:
+            return _people([craftsman])
+    return []
+
+
+@router.get("/messages/stream")
+async def message_stream(request: HttpRequest):
+    async def events():
+        queue = listen_inbox()
+        try:
+            yield "retry: 2000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        finally:
+            close_inbox(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/messages")
@@ -492,7 +550,10 @@ def messages(request_id: int | None = Query(default=None), db: Session = Depends
                 "project": item.project,
                 "company_name": item.company.company_name if item.company else "",
                 "last_message": last.body if last else "",
+                "last_message_id": last.id if last else None,
+                "last_sender": last.sender_role if last else "",
                 "updated_at": dt(last.created_at if last else item.created_at),
+                "selection": _selection_profiles(db, item),
             }
         )
     current = None
@@ -512,7 +573,7 @@ def messages(request_id: int | None = Query(default=None), db: Session = Depends
                     }
                     for msg in item.messages
                 ],
-                "selection": _selection_profiles(db, item.id),
+                "selection": _selection_profiles(db, item),
             }
     return {"threads": threads, "current": current}
 

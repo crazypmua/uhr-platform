@@ -451,34 +451,177 @@ async function requestDetail(id) {
     <p style="margin-top:24px"><a class="btn light" href="${adminHref(`messages/${item.id}`)}">Перейти до повідомлень ↗</a></p></div>`;
 }
 
+const HEARD_KEY = "uhr-admin-heard";
+let audioCtx = null;
+let inboxSource = null;
+let inboxBusy = false;
+let inboxStale = false;
+let inboxChain = Promise.resolve();
+
+function heardMark() {
+  const value = Number(localStorage.getItem(HEARD_KEY) || 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function rememberHeard(id) {
+  if (id > heardMark()) localStorage.setItem(HEARD_KEY, String(id));
+}
+
+function armSound() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  if (!audioCtx) audioCtx = new Ctx();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function playPing() {
+  armSound();
+  if (!audioCtx || audioCtx.state !== "running") return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(880, now);
+  osc.frequency.setValueAtTime(1175, now + 0.14);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.34);
+}
+
+function waitingThreads(threads) {
+  return (threads || []).filter((item) => item.last_sender === "company" && item.last_message_id);
+}
+
+function setMessageBadge(count) {
+  const link = document.querySelector(`.admin-nav a[href="${adminHref("messages")}"]`);
+  if (!link) return;
+  let badge = link.querySelector(".admin-nav-badge");
+  if (!count) {
+    badge?.remove();
+    return;
+  }
+  if (!badge) {
+    badge = document.createElement("span");
+    badge.className = "admin-nav-badge";
+    link.append(badge);
+  }
+  badge.textContent = String(count);
+}
+
+function anketaLabel(count) {
+  const n = Math.abs(count) % 100;
+  const n1 = n % 10;
+  if (n > 10 && n < 20) return `${count} анкет`;
+  if (n1 === 1) return `${count} анкета`;
+  if (n1 > 1 && n1 < 5) return `${count} анкети`;
+  return `${count} анкет`;
+}
+
+function selectionBlock(people, project) {
+  if (people?.length) {
+    const cards = people
+      .map(
+        (person) => `<a class="admin-pick" href="${adminHref(`masters/${person.id}`)}">
+          <b>#${person.id} · ${esc(person.profession || "Профіль")}</b>
+          <span>${esc(person.city || "Місто не вказано")}</span>
+          <em>Відкрити анкету</em>
+        </a>`
+      )
+      .join("");
+    return `<section class="admin-selection"><strong>Обрані анкети</strong><div class="admin-pick-list">${cards}</div></section>`;
+  }
+  if (project === "Selectie") {
+    return `<section class="admin-selection"><strong>Обрані анкети</strong><p>У цій розмові ще немає збережених анкет. Вони з’являться тут, щойно компанія надішле свій вибір.</p></section>`;
+  }
+  return "";
+}
+
+async function watchInbox() {
+  if (!state.user || inboxBusy) return;
+  inboxBusy = true;
+  try {
+    const data = await request("/admin/messages");
+    const waiting = waitingThreads(data.threads);
+    setMessageBadge(waiting.length);
+    const newest = waiting.reduce((max, item) => Math.max(max, item.last_message_id || 0), 0);
+    rememberHeard(newest);
+  } catch {
+    /* лічильник оновиться з наступним повідомленням */
+  } finally {
+    inboxBusy = false;
+  }
+}
+
+function showIncoming(data) {
+  if (!data || data.type !== "message" || data.sender_role !== "company") return;
+  if (data.message_id && data.message_id <= heardMark()) return;
+  if (data.message_id) rememberHeard(data.message_id);
+  playPing();
+  const field = document.querySelector("#chat-form textarea");
+  const draft = Boolean(field?.value.trim());
+  const onMessages = route()[0] === "messages";
+  if (onMessages && !draft) {
+    inboxChain = inboxChain.then(() => render()).catch(() => {});
+    return;
+  }
+  if (draft) inboxStale = true;
+  const badge = Number(document.querySelector(".admin-nav-badge")?.textContent || 0);
+  setMessageBadge(badge + 1);
+  const who = data.company_name ? ` · ${data.company_name}` : "";
+  toast(`Нове повідомлення${who}.`);
+}
+
+function startInboxWatch() {
+  if (inboxSource || !state.user) return;
+  document.addEventListener("pointerdown", armSound, { once: true });
+  document.addEventListener("focusout", (event) => {
+    if (!inboxStale || event.target?.name !== "message" || event.target.value.trim()) return;
+    inboxStale = false;
+    render();
+  });
+  watchInbox();
+  const source = new EventSource("/api/v1/admin/messages/stream");
+  inboxSource = source;
+  source.onmessage = (event) => {
+    try {
+      showIncoming(JSON.parse(event.data));
+    } catch {
+      /* службовий кадр потоку */
+    }
+  };
+}
+
 async function messagesPage(id) {
   const data = await request("/admin/messages" + (id ? `?request_id=${id}` : ""));
+  setMessageBadge(waitingThreads(data.threads).length);
   const threads =
     data.threads
       .map((item) => {
         const active = String(data.current?.id) === String(item.id);
-        return `<a class="admin-thread${active ? " is-active" : ""}" href="${adminHref(`messages/${item.id}`)}">
-          <strong>${esc(item.public_id)} · ${esc(item.project || "Без назви")}</strong>
+        const fresh = item.last_sender === "company" && item.last_message_id;
+        const picks = (item.selection || []).length;
+        return `<a class="admin-thread${active ? " is-active" : ""}${fresh ? " is-new" : ""}" href="${adminHref(`messages/${item.id}`)}">
+          <strong>${esc(item.public_id)} · ${esc(item.project || "Без назви")}${fresh ? `<b class="admin-new">Нове</b>` : ""}</strong>
           <span>${esc(item.company_name || "Компанію не вказано")}</span>
           <p>${esc(item.last_message || "Немає повідомлень")}</p>
+          ${picks ? `<span class="admin-pick-count">${anketaLabel(picks)}</span>` : ""}
           <em>${fmtTime(item.updated_at)}</em>
         </a>`;
       })
       .join("") || `<div class="admin-thread-empty">Немає діалогів. Вони з’являться після заявок компаній.</div>`;
   const opened = data.current;
   const company = opened ? data.threads.find((item) => String(item.id) === String(opened.id)) : null;
+  const people = opened?.selection?.length ? opened.selection : company?.selection || [];
   const chat = opened
     ? `<header class="admin-thread-head">
         <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
         <a href="${adminHref(`requests/${opened.id}`)}">Заявка</a>
       </header>
-      ${
-        (opened.selection || []).length
-          ? `<div class="admin-selection"><span>Обрані профілі</span>${opened.selection
-              .map((person) => `<a href="${adminHref(`masters/${person.id}`)}">#${person.id} ${esc(person.profession)} · ${esc(person.city)}</a>`)
-              .join("")}</div>`
-          : ""
-      }
+      ${selectionBlock(people, opened.project || company?.project)}
       <div class="admin-bubbles">
         ${
           opened.messages
@@ -534,6 +677,7 @@ async function render() {
   icons();
   document.querySelector(".admin-bubbles")?.scrollTo(0, 99999);
   if (page === "cms") await mountCms(arg);
+  if (state.user) startInboxWatch();
 }
 
 app.addEventListener("submit", async (event) => {
