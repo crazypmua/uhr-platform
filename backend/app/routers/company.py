@@ -28,6 +28,7 @@ from ..models import (
     Company,
     CompanyAccount,
     CompanyFavorite,
+    CompanyPick,
     Craftsman,
     Document,
     Message,
@@ -440,6 +441,40 @@ def toggle_favorite(
     return favorites(company, db)
 
 
+@router.get("/picks")
+def picks(company: Company = Depends(get_approved_company), db: Session = Depends(get_db)):
+    try:
+        rows = (
+            db.query(CompanyPick.craftsman_id)
+            .join(Craftsman, Craftsman.id == CompanyPick.craftsman_id)
+            .filter(CompanyPick.company_id == company.id, Craftsman.published.is_(True))
+            .order_by(CompanyPick.created_at)
+        )
+        ids = [row[0] for row in rows]
+    except ProgrammingError:
+        db.rollback()
+        return {"ids": []}
+    return {"ids": ids}
+
+
+@router.post("/picks/{craftsman_id}")
+def toggle_pick(
+    craftsman_id: int,
+    company: Company = Depends(get_approved_company),
+    db: Session = Depends(get_db),
+):
+    craftsman = db.get(Craftsman, craftsman_id)
+    if not craftsman or not craftsman.published:
+        raise HTTPException(status_code=404, detail="Vakman niet gevonden")
+    row = db.query(CompanyPick).filter_by(company_id=company.id, craftsman_id=craftsman_id).first()
+    if row:
+        db.delete(row)
+    else:
+        db.add(CompanyPick(company_id=company.id, craftsman_id=craftsman_id))
+    db.commit()
+    return picks(company, db)
+
+
 @router.get("/requests")
 def company_requests(company: Company = Depends(get_approved_company), db: Session = Depends(get_db)):
     items = (
@@ -481,13 +516,13 @@ def create_company_request(
 def _sync_selection(db: Session, item: WorkRequest, company: Company) -> list[Craftsman]:
     picks = (
         db.query(Craftsman)
-        .join(CompanyFavorite, CompanyFavorite.craftsman_id == Craftsman.id)
-        .filter(CompanyFavorite.company_id == company.id, Craftsman.published.is_(True))
-        .order_by(Craftsman.id)
+        .join(CompanyPick, CompanyPick.craftsman_id == Craftsman.id)
+        .filter(CompanyPick.company_id == company.id, Craftsman.published.is_(True))
+        .order_by(CompanyPick.created_at)
         .all()
     )
     if not picks:
-        raise HTTPException(status_code=422, detail="Bewaar eerst een of meer vakmensen.")
+        raise HTTPException(status_code=422, detail="Selecteer eerst een of meer vakmensen.")
     db.query(RequestSelection).filter(RequestSelection.request_id == item.id).delete(synchronize_session=False)
     for craftsman in picks:
         db.add(RequestSelection(request_id=item.id, craftsman_id=craftsman.id))

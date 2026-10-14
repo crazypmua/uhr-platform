@@ -107,6 +107,14 @@ class CompanyFavorite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class CompanyPick(Base):
+    __tablename__ = "company_picks"
+
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), primary_key=True)
+    craftsman_id: Mapped[int] = mapped_column(ForeignKey("craftsmen.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class RequestSelection(Base):
     __tablename__ = "request_selections"
 
