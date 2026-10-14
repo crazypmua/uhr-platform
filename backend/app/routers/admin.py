@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy import func
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from ..auth import create_preview_token, get_current_admin
@@ -11,7 +12,18 @@ from ..config import settings
 from ..db import get_db
 from ..documents import kind_label
 from ..mailer import send_mail
-from ..models import Company, CompanyAccount, CompanyFavorite, Craftsman, Document, Message, Request, SiteText, User
+from ..models import (
+    Company,
+    CompanyAccount,
+    CompanyFavorite,
+    Craftsman,
+    Document,
+    Message,
+    Request,
+    RequestSelection,
+    SiteText,
+    User,
+)
 from ..notifications import company_approved, craftsman_approved
 from ..schemas import MessageIn, RequestStatusUpdate, SiteSettingsUpdate, StatusUpdate, TextsPut, d, dt
 from ..seed_texts import PAGES, SITES
@@ -452,6 +464,21 @@ def delete_request(item_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+def _selection_profiles(db: Session, request_id: int) -> list[dict]:
+    try:
+        rows = (
+            db.query(Craftsman.id, Craftsman.profession, Craftsman.city)
+            .join(RequestSelection, RequestSelection.craftsman_id == Craftsman.id)
+            .filter(RequestSelection.request_id == request_id)
+            .order_by(Craftsman.id)
+            .all()
+        )
+    except ProgrammingError:
+        db.rollback()
+        return []
+    return [{"id": row.id, "profession": row.profession, "city": row.city or ""} for row in rows]
+
+
 @router.get("/messages")
 def messages(request_id: int | None = Query(default=None), db: Session = Depends(get_db)):
     query = db.query(Request).order_by(Request.updated_at.desc())
@@ -485,6 +512,7 @@ def messages(request_id: int | None = Query(default=None), db: Session = Depends
                     }
                     for msg in item.messages
                 ],
+                "selection": _selection_profiles(db, item.id),
             }
     return {"threads": threads, "current": current}
 

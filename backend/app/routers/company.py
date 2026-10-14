@@ -10,6 +10,7 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import ValidationError
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from ..auth import (
@@ -23,7 +24,16 @@ from ..config import settings
 from ..db import get_db
 from ..documents import kind_label, read_uploads
 from ..mailer import send_mail
-from ..models import Company, CompanyAccount, CompanyFavorite, Craftsman, Document, Message, Request as WorkRequest
+from ..models import (
+    Company,
+    CompanyAccount,
+    CompanyFavorite,
+    Craftsman,
+    Document,
+    Message,
+    Request as WorkRequest,
+    RequestSelection,
+)
 from ..notifications import company_password_reset
 from ..schemas import (
     CompanyMessageIn,
@@ -31,6 +41,7 @@ from ..schemas import (
     CompanyRegistration,
     CompanyRequestIn,
     CompanySignup,
+    SelectionContactIn,
     EmailIn,
     LoginIn,
     PasswordResetIn,
@@ -307,7 +318,22 @@ def _profile(company: Company, db: Session) -> dict:
     }
 
 
-def _request_out(item: WorkRequest) -> dict:
+def _selection_profiles(db: Session, request_id: int) -> list[dict]:
+    try:
+        rows = (
+            db.query(Craftsman.id, Craftsman.profession, Craftsman.city)
+            .join(RequestSelection, RequestSelection.craftsman_id == Craftsman.id)
+            .filter(RequestSelection.request_id == request_id)
+            .order_by(Craftsman.id)
+            .all()
+        )
+    except ProgrammingError:
+        db.rollback()
+        return []
+    return [{"id": row.id, "profession": row.profession, "city": row.city or ""} for row in rows]
+
+
+def _request_out(item: WorkRequest, db: Session) -> dict:
     return {
         "id": item.public_id,
         "worker": item.craftsman_id,
@@ -327,6 +353,7 @@ def _request_out(item: WorkRequest) -> dict:
             {"sender_role": msg.sender_role, "body": msg.body, "created_at": msg.created_at.isoformat()}
             for msg in item.messages
         ],
+        "selection": _selection_profiles(db, item.id),
     }
 
 
@@ -421,7 +448,7 @@ def company_requests(company: Company = Depends(get_approved_company), db: Sessi
         .order_by(WorkRequest.created_at.desc())
         .all()
     )
-    return {"items": [_request_out(item) for item in items]}
+    return {"items": [_request_out(item, db) for item in items]}
 
 
 @router.post("/requests")
@@ -448,7 +475,77 @@ def create_company_request(
     item.public_id = f"A-{2000 + item.id}"
     db.commit()
     db.refresh(item)
-    return _request_out(item)
+    return _request_out(item, db)
+
+
+def _sync_selection(db: Session, item: WorkRequest, company: Company) -> list[Craftsman]:
+    picks = (
+        db.query(Craftsman)
+        .join(CompanyFavorite, CompanyFavorite.craftsman_id == Craftsman.id)
+        .filter(CompanyFavorite.company_id == company.id, Craftsman.published.is_(True))
+        .order_by(Craftsman.id)
+        .all()
+    )
+    if not picks:
+        raise HTTPException(status_code=422, detail="Bewaar eerst een of meer vakmensen.")
+    db.query(RequestSelection).filter(RequestSelection.request_id == item.id).delete(synchronize_session=False)
+    for craftsman in picks:
+        db.add(RequestSelection(request_id=item.id, craftsman_id=craftsman.id))
+    return picks
+
+
+@router.post("/selection/contact")
+def contact_about_selection(
+    payload: SelectionContactIn,
+    background: BackgroundTasks,
+    company: Company = Depends(get_approved_company),
+    db: Session = Depends(get_db),
+):
+    channel = payload.channel if payload.channel in {"chat", "email"} else "chat"
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="Schrijf een bericht")
+    item = (
+        db.query(WorkRequest)
+        .filter(
+            WorkRequest.company_id == company.id,
+            WorkRequest.project == "Selectie",
+            WorkRequest.status.notin_(["done", "cancelled"]),
+        )
+        .order_by(WorkRequest.created_at.desc())
+        .first()
+    )
+    now = datetime.now(timezone.utc)
+    if not item:
+        item = WorkRequest(
+            project="Selectie",
+            company_id=company.id,
+            status="submitted",
+            public_id=f"tmp-{uuid4().hex[:12]}",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(item)
+        db.flush()
+        item.public_id = f"A-{2000 + item.id}"
+    picks = _sync_selection(db, item, company)
+    db.add(Message(request_id=item.id, sender_role="company", body=body, created_at=now))
+    item.updated_at = now
+    db.commit()
+    db.refresh(item)
+    emailed = False
+    if channel == "email" and settings.smtp_host and settings.smtp_from:
+        lines = "\n".join(f"#{row.id} · {row.profession} · {row.city}" for row in picks)
+        background.add_task(
+            send_mail,
+            settings.admin_email,
+            f"Selectie van {company.company_name}",
+            f"{company.contact_name} <{company.email}>\n{company.company_name}\n\n{body}\n\nGeselecteerde vakmensen:\n{lines}",
+        )
+        emailed = True
+    data = _request_out(item, db)
+    data["emailed"] = emailed
+    return data
 
 
 @router.post("/requests/{public_id}/messages")
@@ -467,4 +564,4 @@ def company_message(
     item.updated_at = now
     db.commit()
     db.refresh(item)
-    return _request_out(item)
+    return _request_out(item, db)

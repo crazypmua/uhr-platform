@@ -472,6 +472,13 @@ async function messagesPage(id) {
         <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
         <a href="${adminHref(`requests/${opened.id}`)}">Заявка</a>
       </header>
+      ${
+        (opened.selection || []).length
+          ? `<div class="admin-selection"><span>Обрані профілі</span>${opened.selection
+              .map((person) => `<a href="${adminHref(`masters/${person.id}`)}">#${person.id} ${esc(person.profession)} · ${esc(person.city)}</a>`)
+              .join("")}</div>`
+          : ""
+      }
       <div class="admin-bubbles">
         ${
           opened.messages

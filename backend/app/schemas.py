@@ -168,6 +168,11 @@ class CompanyMessageIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 
 
+class SelectionContactIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    channel: str = "chat"
+
+
 class CompanyRegistration(BaseModel):
     company_name: str = Field(min_length=1, max_length=255)
     kvk: str = Field(pattern=r"^\d{8}$")
