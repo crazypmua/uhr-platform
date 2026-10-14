@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
@@ -9,9 +8,9 @@ from starlette.datastructures import UploadFile
 from ..db import get_db
 from ..documents import DOCUMENT_KINDS, read_uploads, store_documents
 from ..mailer import send_mail
-from ..models import Company, Craftsman, Request as WorkRequest, SiteText
+from ..models import Company, Craftsman, SiteText
 from ..notifications import craftsman_received
-from ..schemas import CompanyApplication, CraftsmanApplication, RequestApplication
+from ..schemas import CompanyApplication, CraftsmanApplication
 
 router = APIRouter(tags=["public"])
 
@@ -89,17 +88,3 @@ async def create_company(request: Request, db: Session = Depends(get_db)):
     item = Company(**payload.model_dump(), status="pending", consent_at=datetime.now(timezone.utc))
     _save_with_documents(db, item, "company", uploads)
     return {"id": item.id, "status": item.status}
-
-
-@router.post("/public/applications/requests")
-def create_request(payload: RequestApplication, db: Session = Depends(get_db)):
-    company = db.get(Company, payload.company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Компанію не знайдено")
-    item = WorkRequest(**payload.model_dump(), status="submitted", public_id=f"tmp-{uuid4().hex[:12]}")
-    db.add(item)
-    db.flush()
-    item.public_id = f"A-{2000 + item.id}"
-    db.commit()
-    db.refresh(item)
-    return {"id": item.id, "public_id": item.public_id, "status": item.status}

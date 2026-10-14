@@ -1,6 +1,6 @@
 from .config import settings
 from .documents import kind_label
-from .models import Craftsman
+from .models import Company, Craftsman
 
 CRAFTSMAN_FIELDS = [
     ("name", "ПІБ"),
@@ -59,3 +59,25 @@ def craftsman_approved(item: Craftsman) -> tuple[str, str]:
         "Команда Ukrwerkspot"
     )
     return "Ukrwerkspot: вашу анкету схвалено", body
+
+
+def company_approved(item: Company) -> tuple[str, str]:
+    body = (
+        f"Beste {item.contact_name or item.company_name},\n\n"
+        f"De registratie van {item.company_name} bij UHR is goedgekeurd. "
+        "U kunt nu inloggen en gecontroleerde vakmensen bekijken en aanvragen.\n\n"
+        f"Inloggen:\n{settings.uhrbv_url.rstrip('/')}/#login\n\n"
+        "Met vriendelijke groet,\nUHR"
+    )
+    return "UHR: uw registratie is goedgekeurd", body
+
+
+def company_password_reset(link: str) -> tuple[str, str]:
+    body = (
+        "U heeft een nieuw wachtwoord aangevraagd voor uw UHR-account.\n\n"
+        "Kies een nieuw wachtwoord via deze link. De link is 1 uur geldig:\n"
+        f"{link}\n\n"
+        "Heeft u dit niet aangevraagd? Dan kunt u deze e-mail negeren.\n\n"
+        "Met vriendelijke groet,\nUHR"
+    )
+    return "UHR: wachtwoord herstellen", body

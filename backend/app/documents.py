@@ -27,6 +27,7 @@ DOCUMENT_KINDS = {
         "portrait": "Фото в робочому одязі",
     },
     "company": {
+        "sna": "SNA-certificaat",
         "company_docs": "Bedrijfsdocumenten",
         "certificates": "Certificaten",
     },

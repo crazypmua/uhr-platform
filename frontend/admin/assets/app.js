@@ -195,6 +195,38 @@ function documentsBlock(documents = []) {
     .join("")}</div>`;
 }
 
+function snaBlock(item) {
+  const sna = item.sna_details || {};
+  if (!sna.checked_at) return "";
+  const register = sna.register;
+  const extracted = sna.extracted || {};
+  const verdict = item.sna_verified
+    ? "Підтверджено реєстром SNA"
+    : !sna.kvk_matches
+      ? "KvK у сертифікаті не збігається з указаним компанією"
+      : register?.found
+        ? "Компанія є в реєстрі SNA, але KvK не прочитано з файлу — перевірте сертифікат вручну"
+        : register?.found === false
+          ? "KvK не знайдено в реєстрі SNA"
+          : "Автоматично перевірити не вдалося — перевірте вручну";
+  return `<div class="card" style="margin:24px 0">
+    <h3>Сертифікат SNA</h3>
+    <p><span class="badge ${item.sna_verified ? "" : "yellow"}">${esc(verdict)}</span></p>
+    ${fieldList([
+      ["KvK для перевірки", sna.kvk],
+      ["З сертифіката: компанія", extracted.company_name],
+      ["З сертифіката: місто", extracted.city],
+      ["З сертифіката: KvK", extracted.kvk],
+      ["З сертифіката: дата", extracted.date],
+      ["Реєстр: компанія", register?.company_name],
+      ["Реєстр: адреса", register?.address],
+      ["Реєстр: діяльність", (register?.activities || []).join(", ")],
+      ["Перевірено", fmtDate(sna.checked_at)],
+    ])}
+    <p style="margin-top:16px"><a href="${esc(sna.register_url)}" target="_blank" rel="noopener">Відкрити реєстр SNA ↗</a></p>
+  </div>`;
+}
+
 function statusForm(prefix, item) {
   return `<form id="status-form" class="card" data-prefix="${prefix}" data-id="${item.id}">
     <h3>Рішення менеджера</h3>
@@ -286,7 +318,8 @@ async function companyDetail(id) {
       ["Очікувана кількість", item.expected_count],
       ["SNA", item.sna],
     ])}
-    <div class="card" style="margin:24px 0"><h3>Опис компанії</h3><p>${esc(item.description || "—")}</p></div>
+    <div class="card" style="margin:24px 0"><h3>Коментар компанії</h3><p>${esc(item.description || "—")}</p></div>
+    ${snaBlock(item)}
     ${documentsBlock(item.documents)}
     ${statusForm("companies", item)}`,
     "companies"

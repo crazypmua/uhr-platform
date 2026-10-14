@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import get_db
-from .models import User
+from .models import CompanyAccount, User
 
 TOKEN_HOURS = 72
+COMPANY_TOKEN_DAYS = 30
 PREVIEW_TOKEN_MINUTES = 5
 PREVIEW_COOKIE_HOURS = 1
 
@@ -126,3 +127,44 @@ def get_current_admin(
     if not user or not user.is_active or user.role != "admin":
         raise HTTPException(status_code=401, detail="Немає доступу")
     return user
+
+
+def set_company_cookie(response: Response, account: CompanyAccount) -> None:
+    payload = {
+        "sub": str(account.id),
+        "role": "company",
+        "exp": datetime.now(timezone.utc) + timedelta(days=COMPANY_TOKEN_DAYS),
+    }
+    response.set_cookie(
+        key=settings.company_cookie_name,
+        value=jwt.encode(payload, settings.secret_key, algorithm="HS256"),
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=COMPANY_TOKEN_DAYS * 86400,
+        path="/",
+    )
+
+
+def clear_company_cookie(response: Response) -> None:
+    response.delete_cookie(settings.company_cookie_name, path="/")
+
+
+def optional_company_account(request: Request, db: Session = Depends(get_db)) -> CompanyAccount | None:
+    token = request.cookies.get(settings.company_cookie_name)
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        account_id = int(payload.get("sub", 0))
+    except (jwt.PyJWTError, ValueError, TypeError):
+        return None
+    if payload.get("role") != "company":
+        return None
+    return db.get(CompanyAccount, account_id)
+
+
+def get_company_account(account: CompanyAccount | None = Depends(optional_company_account)) -> CompanyAccount:
+    if not account:
+        raise HTTPException(status_code=401, detail="Log in om verder te gaan")
+    return account

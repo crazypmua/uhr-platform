@@ -129,6 +129,56 @@ class CompanyApplication(BaseModel):
     sna: str = ""
 
 
+class CompanySignup(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class EmailIn(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetIn(BaseModel):
+    token: str = Field(min_length=1)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class CompanyProfileUpdate(BaseModel):
+    contact_name: str = Field(min_length=1, max_length=255)
+    contact_role: str = Field(default="", max_length=128)
+    phone: str = Field(min_length=1, max_length=64)
+    website: str = Field(default="", max_length=255)
+    address: str = ""
+    description: str = ""
+
+
+class CompanyRequestIn(BaseModel):
+    craftsman_id: int | None = None
+    project: str = Field(min_length=1, max_length=255)
+    site_address: str = ""
+    start_date: date | None = None
+    duration: str = Field(default="", max_length=128)
+    schedule: str = Field(default="", max_length=255)
+    workers_count: int | None = Field(default=None, ge=1, le=100)
+    work_description: str = Field(default="", max_length=4000)
+    requirements: str = Field(default="", max_length=4000)
+
+
+class CompanyMessageIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class CompanyRegistration(BaseModel):
+    company_name: str = Field(min_length=1, max_length=255)
+    kvk: str = Field(pattern=r"^\d{8}$")
+    address: str = ""
+    contact_name: str = Field(min_length=1, max_length=255)
+    contact_role: str = Field(default="", max_length=128)
+    phone: str = Field(min_length=1, max_length=64)
+    website: str = Field(default="", max_length=255)
+    description: str = ""
+
+
 class RequestApplication(BaseModel):
     company_id: int
     craftsman_id: int | None = None

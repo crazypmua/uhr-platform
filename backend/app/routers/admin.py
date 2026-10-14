@@ -12,7 +12,7 @@ from ..db import get_db
 from ..documents import kind_label
 from ..mailer import send_mail
 from ..models import Company, Craftsman, Document, Message, Request, SiteText, User
-from ..notifications import craftsman_approved
+from ..notifications import company_approved, craftsman_approved
 from ..schemas import MessageIn, RequestStatusUpdate, SiteSettingsUpdate, StatusUpdate, TextsPut, d, dt
 from ..seed_texts import PAGES, SITES
 
@@ -134,6 +134,8 @@ def _company_out(item: Company, db: Session, full: bool = False) -> dict:
             "desired_profession": item.desired_profession,
             "expected_count": item.expected_count,
             "sna": item.sna,
+            "sna_verified": item.sna_verified,
+            "sna_details": item.sna_details or {},
             "admin_comment": item.admin_comment,
             "consent_at": dt(item.consent_at),
             "updated_at": dt(item.updated_at),
@@ -298,13 +300,18 @@ def company_detail(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/companies/{item_id}/status")
-def company_status(item_id: int, payload: StatusUpdate, db: Session = Depends(get_db)):
+def company_status(
+    item_id: int, payload: StatusUpdate, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     item = db.get(Company, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Компанію не знайдено")
+    newly_approved = payload.status == "approved" and item.status != "approved"
     _apply_status(item, payload)
     db.commit()
     db.refresh(item)
+    if newly_approved:
+        background.add_task(send_mail, item.email, *company_approved(item))
     return _company_out(item, db, full=True)
 
 

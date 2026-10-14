@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_ssl: bool = False
     craftsman_approved_url: str = ""
+    company_cookie_name: str = "uhr_company"
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def google_redirect_uri(self) -> str:
+        return f"{self.uhrbv_url.rstrip('/')}/api/v1/company/auth/google/callback"
 
     @property
     def cors_list(self) -> list[str]:
