@@ -1,4 +1,5 @@
 import { API, request } from "./api.js";
+import { adminHref, adminRoute, navigate } from "./path.js";
 
 let editor = null;
 let currentPage = null;
@@ -21,7 +22,7 @@ const cmsNav = (site, active) => `
       ["pages", "Сторінки"], ["menu", "Меню"], ["news", "Новини"],
       ["blog", "Блог"], ["catalog", "Каталог"], ["media", "Медіа"],
     ].map(([id, label]) =>
-      `<a class="${active === id ? "active" : ""}" href="#cms/${id}/${site}">${label}</a>`
+      `<a class="${active === id ? "active" : ""}" href="${adminHref(`cms/${id}/${site}`)}">${label}</a>`
     ).join("")}
   </nav>`;
 
@@ -51,7 +52,7 @@ async function pagesEditor(site) {
         <td>/${esc(page.slug === "home" ? "" : page.slug)}</td>
         <td>${page.draft_version_id ? "Так" : "—"}</td>
         <td>${page.published_version_id ? "Так" : "—"}</td>
-        <td><a class="btn light" href="#cms/page/${page.id}">Відкрити редактор</a></td>
+        <td><a class="btn light" href="${adminHref(`cms/page/${page.id}`)}">Відкрити редактор</a></td>
       </tr>`).join("") || `<tr><td colspan="5">Сторінок ще немає.</td></tr>`}</tbody>
     </table></div>
     <form id="cms-new-page-form" class="card cms-dialog" hidden>
@@ -71,7 +72,7 @@ async function pageEditor(pageId) {
   const versions = currentPage.versions || [];
   return `
     <div class="cms-editor-head">
-      <div><a href="#cms/pages/${currentPage.site}" class="back-link">← До сторінок</a>
+      <div><a href="${adminHref(`cms/pages/${currentPage.site}`)}" class="back-link">← До сторінок</a>
         <h1>${esc(currentPage.title)}</h1><span class="muted">/${esc(currentPage.slug)}</span>
       </div>
       <div class="actions">
@@ -97,8 +98,8 @@ async function menuEditor(site, area) {
   const menu = await request(`/admin/cms/menus/${site}/${area}`);
   return `
     <h1>Редактор меню</h1>${cmsNav(site, "menu")}
-    <div class="cms-subnav"><a class="${area === "header" ? "active" : ""}" href="#cms/menu/${site}/header">Header</a>
-      <a class="${area === "footer" ? "active" : ""}" href="#cms/menu/${site}/footer">Footer</a></div>
+    <div class="cms-subnav"><a class="${area === "header" ? "active" : ""}" href="${adminHref(`cms/menu/${site}/header`)}">Header</a>
+      <a class="${area === "footer" ? "active" : ""}" href="${adminHref(`cms/menu/${site}/footer`)}">Footer</a></div>
     <div class="cms-toolbar"><label>Сайт ${siteSelect(site)}</label>
       <button class="btn light" data-menu-add>Додати пункт</button>
       <button class="btn" data-menu-publish>Опублікувати меню</button></div>
@@ -244,7 +245,7 @@ export async function handleCmsSubmit(form) {
   if (form.id === "cms-new-page-form") {
     const data = Object.fromEntries(new FormData(form));
     const page = await request("/admin/cms/pages", { method: "POST", json: data });
-    location.hash = `cms/page/${page.id}`;
+    navigate(`cms/page/${page.id}`);
     return true;
   }
   if (form.id === "cms-menu-form") {
@@ -282,8 +283,7 @@ export async function handleCmsClick(target) {
   const bootstrap = target.closest("[data-cms-bootstrap]");
   if (bootstrap) {
     await request(`/admin/cms/pages/bootstrap/${bootstrap.dataset.cmsBootstrap}`, { method: "POST", json: {} });
-    location.hash = `cms/pages/${bootstrap.dataset.cmsBootstrap}`;
-    location.reload();
+    location.assign(adminHref(`cms/pages/${bootstrap.dataset.cmsBootstrap}`));
     return true;
   }
   if (target.closest("[data-cms-new-page]")) {
@@ -336,8 +336,8 @@ export async function handleCmsClick(target) {
 
 export function handleCmsChange(select) {
   if (select.name !== "site") return false;
-  const [root, section = "pages", , detail] = (location.hash.slice(1) || "cms/pages").split("/");
+  const [root, section = "pages", , detail] = adminRoute();
   if (root !== "cms") return false;
-  location.hash = `cms/${section}/${select.value}${detail ? `/${detail}` : ""}`;
+  navigate(`cms/${section}/${select.value}${detail ? `/${detail}` : ""}`);
   return true;
 }

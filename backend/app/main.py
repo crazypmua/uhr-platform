@@ -104,6 +104,13 @@ def admin_asset(path: str):
     return FileResponse(found, headers=_cache_headers(found))
 
 
+@app.get("/admin/{rest:path}", include_in_schema=False)
+def admin_spa(rest: str):
+    if rest.startswith("assets/"):
+        raise HTTPException(status_code=404)
+    return FileResponse(admin_dir / "index.html", headers={"Cache-Control": "no-store, max-age=0"})
+
+
 if uploads.exists():
     app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
 if admin_dir.exists():

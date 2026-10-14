@@ -1,6 +1,7 @@
 import { request } from "./api.js";
 import { handleCmsChange, handleCmsClick, handleCmsSubmit, mountCms, renderCms } from "./cms.js";
 import { ICONS } from "./icons.js";
+import { adminHref, adminRoute, adminSearch, adoptLegacyHash, navigate } from "./path.js";
 
 const app = document.querySelector("#app");
 const state = { user: null, toast: "" };
@@ -16,7 +17,7 @@ const esc = (value) =>
 
 const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const icons = () => window.lucide?.createIcons({ attrs: { "stroke-width": 1.7, "aria-hidden": "true" } });
-const route = () => ((location.hash.slice(1) || "overview").split("?")[0] || "overview").split("/");
+const route = adminRoute;
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("uk-UA") : "—");
 const fmtTime = (iso) =>
   iso ? new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
@@ -35,15 +36,20 @@ const NAV = [
 
 function shell(content, page) {
   const link = ([id, name, label]) =>
-    `<a class="${page === id ? "active" : ""}" ${page === id ? 'aria-current="page"' : ""} href="#${id}">${icon(name)}${label}</a>`;
+    `<a class="${page === id ? "active" : ""}" ${page === id ? 'aria-current="page"' : ""} href="${adminHref(id)}">${icon(name)}<span>${label}</span></a>`;
+  const name = state.user?.name || "Менеджер";
   return `<div class="admin-layout">
     <aside class="admin-sidebar">
-      <a href="#overview" class="admin-brand">UHR</a>
+      <a href="${adminHref("overview")}" class="admin-brand"><span class="admin-mark">U</span><span>UHR</span></a>
+      <div class="admin-nav-label">Робочий простір</div>
       <nav class="admin-nav" aria-label="Меню">${NAV.map(link).join("")}</nav>
       <div class="admin-account">
-        <strong>${esc(state.user?.name || "Менеджер")}</strong>
-        <span>${esc(state.user?.email || "")}</span>
-        <a href="#logout" data-logout>${icon(ICONS.logout)}Вийти</a>
+        <span class="admin-avatar">${esc(name.trim().charAt(0).toUpperCase())}</span>
+        <div>
+          <strong>${esc(name)}</strong>
+          <span>${esc(state.user?.email || "")}</span>
+          <a href="${adminHref("overview")}" data-logout>Вийти</a>
+        </div>
       </div>
     </aside>
     <main class="content admin-main">${content}</main>
@@ -58,9 +64,9 @@ function paint(content, page) {
     return;
   }
   main.innerHTML = content;
-  main.scrollTop = 0;
+  window.scrollTo(0, 0);
   layout.querySelectorAll(".admin-nav a").forEach((link) => {
-    const active = link.getAttribute("href") === `#${page}`;
+    const active = link.getAttribute("href") === adminHref(page);
     link.classList.toggle("active", active);
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
@@ -68,7 +74,7 @@ function paint(content, page) {
 }
 
 function pageParams() {
-  return new URLSearchParams(location.hash.split("?")[1] || "");
+  return adminSearch();
 }
 
 function currentPage() {
@@ -83,7 +89,7 @@ function pageHref(path, page, extra = {}) {
   });
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
-  return `#${path}${query ? `?${query}` : ""}`;
+  return adminHref(`${path}${query ? `?${query}` : ""}`);
 }
 
 function slicePage(items) {
@@ -147,33 +153,38 @@ function loginPage(error = "") {
   </div></div>`;
 }
 
-function statusFilter(current, extra = []) {
+function statusFilter(current, section, extra = []) {
   const options = [["", "Усі статуси"], ["pending", "На перевірці"], ["clarification", "Уточнення"], ["approved", "Схвалено"], ["rejected", "Відхилено"], ...extra];
-  return `<select id="status-filter" class="admin-filter">${options
+  return `<select id="status-filter" class="admin-filter" data-section="${section}">${options
     .map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`)
     .join("")}</select>`;
+}
+
+function pageHead(title, text, tools = "") {
+  return `<header class="admin-head"><div class="admin-head-title"><h1>${title}</h1>${text ? `<p>${text}</p>` : ""}</div>${
+    tools ? `<div class="admin-head-tools">${tools}</div>` : ""
+  }</header>`;
+}
+
+function listFoot(path, meta, extra) {
+  if (!meta.total) return "";
+  return `<footer class="admin-list-foot">${pageNote(meta)}${pager(path, meta, extra)}</footer>`;
 }
 
 async function overview() {
   const data = await request("/admin/overview");
   const cards = [
-    ["Нові анкети", data.new_masters, "#masters", "Перевірка VCA та професійного досвіду."],
-    ["Компанії на перевірці", data.companies_review, "#companies", "Перевірка юридичних даних та документів."],
-    ["Активні заявки", data.active_requests, "#requests", "Планування та узгодження з компаніями."],
-    ["Опубліковані профілі", data.published_profiles, "#masters", "Обезличені профілі для каталогу UHR."],
+    ["Нові анкети", data.new_masters, adminHref("masters"), "Перевірка VCA та професійного досвіду."],
+    ["Компанії на перевірці", data.companies_review, adminHref("companies"), "Перевірка юридичних даних та документів."],
+    ["Активні заявки", data.active_requests, adminHref("requests"), "Планування та узгодження з компаніями."],
+    ["Опубліковані профілі", data.published_profiles, adminHref("masters"), "Обезличені профілі для каталогу UHR."],
   ];
-  return `
-    <div class="eyebrow">Єдина екосистема · два домени</div>
-    <h1>Центр управління UHR</h1>
-    <p>Ukrwerkspot збирає анкети майстрів. UHR приймає компанії. Тексти Ukrwerkspot редагуються тут.</p>
-    <div class="stats">${cards
-      .map(([label, value]) => `<div class="card">${esc(label)}<strong>${esc(value)}</strong></div>`)
+  return `${pageHead("Огляд", "Ukrwerkspot збирає анкети майстрів. UHR приймає компанії.")}
+    <div class="admin-metrics">${cards
+      .map(([label, value, href]) => `<a class="admin-metric" href="${href}"><span>${esc(label)}</span><strong>${esc(value)}</strong></a>`)
       .join("")}</div>
-    <div class="grid">${cards
-      .map(
-        ([label, , href, text]) =>
-          `<a class="card" href="${href}"><h3>${esc(label)} ↗</h3><p>${esc(text)}</p></a>`
-      )
+    <div class="admin-links">${cards
+      .map(([, , href, text]) => `<a href="${href}">${esc(text)}</a>`)
       .join("")}</div>`;
 }
 
@@ -202,15 +213,14 @@ async function siteSettings() {
       </form>`
     )
     .join("");
-  return `<h1>Відкрити або закрити сайти</h1>
-    <p>У закритому режимі звичайний відвідувач бачить заглушку. Кнопка перегляду відкриває повний сайт тільки для адміністратора.</p>
-    <div class="grid">${cards}</div>
-    <div class="note">Доступ до закритого Ukrwerkspot передається окремою захищеною cookie на 1 годину, тому що браузер не дозволяє спільну cookie для двох різних доменів.</div>`;
+  return `${pageHead("Налаштування", "У закритому режимі звичайний відвідувач бачить заглушку. Перегляд відкриває повний сайт тільки для адміністратора.")}
+    <div class="admin-record"><div class="grid">${cards}</div>
+    <div class="note">Доступ до закритого Ukrwerkspot передається окремою захищеною cookie на 1 годину, тому що браузер не дозволяє спільну cookie для двох різних доменів.</div></div>`;
 }
 
 function table(headers, rows) {
-  if (!rows.length) return `<div class="card empty">Поки що немає записів.</div>`;
-  return `<div class="card table-scroll"><table>
+  if (!rows.length) return `<div class="admin-empty">Поки що немає записів.</div>`;
+  return `<div class="admin-sheet"><table class="admin-table">
     <thead><tr>${headers.map((h) => `<th${h === "Дії" ? ' class="admin-actions-col"' : ""}>${h}</th>`).join("")}</tr></thead>
     <tbody>${rows.join("")}</tbody>
   </table></div>`;
@@ -221,21 +231,21 @@ async function masters() {
   const items = await request("/admin/craftsmen" + (status ? `?status=${encodeURIComponent(status)}` : ""));
   const meta = slicePage(items);
   const rows = meta.rows.map(
-    (item) => `<tr>
-      <td><a href="#masters/${item.id}">#${item.id}</a></td>
+    (item) => `<tr class="${item.status === "pending" || item.status === "clarification" ? "is-attention" : ""}">
+      <td><a href="${adminHref(`masters/${item.id}`)}">#${item.id}</a></td>
       <td>${esc(item.name)}</td>
       <td>${esc(item.profession)}</td>
       <td>${esc(item.city)}</td>
       <td>${esc(item.source)}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
       <td>${fmtDate(item.created_at)}</td>
-      <td>${rowActions(`#masters/${item.id}`, "craftsmen", item.id, item.name)}</td>
+      <td>${rowActions(adminHref(`masters/${item.id}`), "craftsmen", item.id, item.name)}</td>
     </tr>`
   );
-  return `<h1>Перевірка майстрів</h1><p>Анкети з Ukrwerkspot. Після схвалення публікується лише професійний профіль без імені та контактів.</p>${statusFilter(status)}${pageNote(meta)}${table(
+  return `${pageHead("Анкети майстрів", "Після схвалення публікується лише професійний профіль без імені та контактів.", statusFilter(status, "masters"))}${table(
     ["ID", "Ім’я", "Спеціалізація", "Місто", "Джерело", "Статус", "Дата", "Дії"],
     rows
-  )}${pager("masters", meta, { status })}`;
+  )}${listFoot("masters", meta, { status })}`;
 }
 
 function fieldList(pairs) {
@@ -311,7 +321,7 @@ function statusForm(prefix, item) {
 
 async function masterDetail(id) {
   const item = await request(`/admin/craftsmen/${id}`);
-  return `<a href="#masters" class="back-link">${icon("arrow-left")} До анкет</a>
+  return `<div class="admin-record"><a href="${adminHref("masters")}" class="back-link">${icon("arrow-left")} До анкет</a>
     <div class="eyebrow">Ukrwerkspot · анкета #${item.id}</div>
     <h1>${esc(item.name || "Без імені")}</h1>
     <p>${esc(item.profession)} · ${esc(item.city)} · ${esc(item.status_label)}</p>
@@ -340,32 +350,33 @@ async function masterDetail(id) {
     ])}
     <div class="card" style="margin:24px 0"><h3>Опис досвіду</h3><p>${esc(item.description || "—")}</p></div>
     ${documentsBlock(item.documents)}
-    ${statusForm("craftsmen", item)}`;
+    ${statusForm("craftsmen", item)}</div>`;
 }
 
 async function companies() {
-  const items = await request("/admin/companies");
+  const status = pageParams().get("status") || "";
+  const items = await request("/admin/companies" + (status ? `?status=${encodeURIComponent(status)}` : ""));
   const meta = slicePage(items);
   const rows = meta.rows.map(
-    (item) => `<tr>
-      <td><a href="#companies/${item.id}">#${item.id}</a></td>
+    (item) => `<tr class="${item.status === "pending" || item.status === "clarification" ? "is-attention" : ""}">
+      <td><a href="${adminHref(`companies/${item.id}`)}">#${item.id}</a></td>
       <td>${esc(item.company_name)}</td>
       <td>${esc(item.contact_name)}</td>
       <td>${esc(item.source)}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
       <td>${fmtDate(item.created_at)}</td>
-      <td>${rowActions(`#companies/${item.id}`, "companies", item.id, item.company_name)}</td>
+      <td>${rowActions(adminHref(`companies/${item.id}`), "companies", item.id, item.company_name)}</td>
     </tr>`
   );
-  return `<h1>Перевірка компаній</h1><p>Реєстрації з uhrbv.nl. Після перевірки компанія отримає доступ до каталогу.</p>${pageNote(meta)}${table(
+  return `${pageHead("Компанії", "Реєстрації з uhrbv.nl. Після перевірки компанія отримає доступ до каталогу.", statusFilter(status, "companies"))}${table(
     ["ID", "Компанія", "Контакт", "Джерело", "Статус", "Дата", "Дії"],
     rows
-  )}${pager("companies", meta)}`;
+  )}${listFoot("companies", meta, { status })}`;
 }
 
 async function companyDetail(id) {
   const item = await request(`/admin/companies/${id}`);
-  return `<a href="#companies" class="back-link">${icon("arrow-left")} До компаній</a>
+  return `<div class="admin-record"><a href="${adminHref("companies")}" class="back-link">${icon("arrow-left")} До компаній</a>
     <div class="eyebrow">UHR · компанія #${item.id}</div>
     <h1>${esc(item.company_name)}</h1>
     ${fieldList([
@@ -385,7 +396,7 @@ async function companyDetail(id) {
     <div class="card" style="margin:24px 0"><h3>Коментар компанії</h3><p>${esc(item.description || "—")}</p></div>
     ${snaBlock(item)}
     ${documentsBlock(item.documents)}
-    ${statusForm("companies", item)}`;
+    ${statusForm("companies", item)}</div>`;
 }
 
 async function requestsPage() {
@@ -393,19 +404,19 @@ async function requestsPage() {
   const meta = slicePage(items);
   const rows = meta.rows.map(
     (item) => `<tr>
-      <td><a href="#requests/${item.id}">${esc(item.public_id)}</a></td>
+      <td><a href="${adminHref(`requests/${item.id}`)}">${esc(item.public_id)}</a></td>
       <td>${esc(item.project)}</td>
       <td>${esc(item.company_name)}</td>
       <td>${esc(item.profession)}</td>
       <td>${esc(item.start_date || "—")}</td>
       <td><span class="badge ${badgeClass(item.status)}">${esc(item.status_label)}</span></td>
-      <td>${rowActions(`#requests/${item.id}`, "requests", item.id, item.public_id)}</td>
+      <td>${rowActions(adminHref(`requests/${item.id}`), "requests", item.id, item.public_id)}</td>
     </tr>`
   );
-  return `<h1>Заявки компаній</h1><p>Concept → Ingediend → In behandeling → Kandidaat geselecteerd → Bevestigd → Afgerond / Geannuleerd</p>${pageNote(meta)}${table(
+  return `${pageHead("Заявки", "Concept → Ingediend → In behandeling → Kandidaat geselecteerd → Bevestigd → Afgerond / Geannuleerd")}${table(
     ["Заявка", "Проєкт", "Компанія", "Спеціалізація", "Старт", "Статус", "Дії"],
     rows
-  )}${pager("requests", meta)}`;
+  )}${listFoot("requests", meta)}`;
 }
 
 async function requestDetail(id) {
@@ -418,7 +429,7 @@ async function requestDetail(id) {
     ["done", "Afgerond"],
     ["cancelled", "Geannuleerd"],
   ];
-  return `<a href="#requests" class="back-link">${icon("arrow-left")} До заявок</a>
+  return `<div class="admin-record"><a href="${adminHref("requests")}" class="back-link">${icon("arrow-left")} До заявок</a>
     <h1>Заявка ${esc(item.public_id)}</h1>
     <p>${esc(item.company?.company_name || "")} · ${esc(item.status_label)}</p>
     ${fieldList([
@@ -437,7 +448,7 @@ async function requestDetail(id) {
         .join("")}</select></label>
       <button class="btn" style="margin-top:20px">Оновити статус</button>
     </form>
-    <p style="margin-top:24px"><a class="btn light" href="#messages/${item.id}">Перейти до повідомлень ↗</a></p>`;
+    <p style="margin-top:24px"><a class="btn light" href="${adminHref(`messages/${item.id}`)}">Перейти до повідомлень ↗</a></p></div>`;
 }
 
 async function messagesPage(id) {
@@ -446,7 +457,7 @@ async function messagesPage(id) {
     data.threads
       .map((item) => {
         const active = String(data.current?.id) === String(item.id);
-        return `<a class="admin-thread${active ? " is-active" : ""}" href="#messages/${item.id}">
+        return `<a class="admin-thread${active ? " is-active" : ""}" href="${adminHref(`messages/${item.id}`)}">
           <strong>${esc(item.public_id)} · ${esc(item.project || "Без назви")}</strong>
           <span>${esc(item.company_name || "Компанію не вказано")}</span>
           <p>${esc(item.last_message || "Немає повідомлень")}</p>
@@ -459,7 +470,7 @@ async function messagesPage(id) {
   const chat = opened
     ? `<header class="admin-thread-head">
         <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
-        <a href="#requests/${opened.id}">Заявка</a>
+        <a href="${adminHref(`requests/${opened.id}`)}">Заявка</a>
       </header>
       <div class="admin-bubbles">
         ${
@@ -477,10 +488,8 @@ async function messagesPage(id) {
         <button class="btn">Надіслати</button>
       </form>`
     : `<div class="admin-thread-empty"><p>Оберіть заявку зі списку зліва.</p></div>`;
-  return `<div class="admin-fill">
-    <h1>Повідомлення</h1>
-    <div class="admin-inbox"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section></div>
-  </div>`;
+  return `${pageHead("Повідомлення", "Листування з компаніями по заявках.")}
+    <div class="admin-fill"><div class="admin-inbox"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section></div></div>`;
 }
 
 async function render() {
@@ -535,8 +544,7 @@ app.addEventListener("submit", async (event) => {
         method: "POST",
         json: { email: data.get("email"), password: data.get("password") },
       });
-      location.hash = "overview";
-      await render();
+      navigate("overview");
       return;
     }
     if (form.id === "status-form") {
@@ -585,6 +593,24 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
+  const link = event.target.closest("a[href]");
+  if (
+    link &&
+    !link.hasAttribute("data-logout") &&
+    link.target !== "_blank" &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  ) {
+    const url = new URL(link.href, location.origin);
+    if (url.origin === location.origin && (url.pathname === "/admin" || url.pathname.startsWith("/admin/"))) {
+      event.preventDefault();
+      const path = url.pathname === "/admin" || url.pathname === "/admin/" ? "" : url.pathname.slice("/admin/".length);
+      navigate(`${path}${url.search}`);
+      return;
+    }
+  }
   try {
     if (await handleCmsClick(event.target)) return;
   } catch (error) {
@@ -616,7 +642,7 @@ app.addEventListener("click", async (event) => {
       toast("Запис видалено.");
       const [section, detail] = route();
       const list = section === "masters" || section === "companies" || section === "requests" ? section : "overview";
-      if (detail) location.hash = list;
+      if (detail) navigate(list);
       else await render();
     } catch (error) {
       toast(error.message);
@@ -634,13 +660,16 @@ app.addEventListener("change", (event) => {
   if (handleCmsChange(event.target)) return;
   if (event.target.id === "status-filter") {
     const value = event.target.value;
-    location.hash = value ? `masters?status=${value}` : "masters";
+    const section = event.target.dataset.section || "masters";
+    navigate(value ? `${section}?status=${encodeURIComponent(value)}` : section);
     return;
   }
 });
 
-window.addEventListener("hashchange", render);
+window.addEventListener("popstate", render);
 window.addEventListener("cms-toast", (event) => toast(event.detail));
+
+adoptLegacyHash();
 
 try {
   state.user = await request("/auth/me");

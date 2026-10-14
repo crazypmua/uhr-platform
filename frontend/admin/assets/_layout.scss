@@ -1,17 +1,20 @@
 @use "mixins" as *;
 
-$sidebar-width: 260px;
+$sidebar-width: 248px;
+
+body[data-site="admin"] {
+  background: #fff;
+}
 
 .admin-layout {
   display: grid;
   grid-template-columns: $sidebar-width minmax(0, 1fr);
-  height: 100vh;
-  overflow: hidden;
+  align-items: start;
+  min-height: 100vh;
+  background: #fff;
 
   @include mobile {
     display: block;
-    height: auto;
-    overflow: visible;
   }
 }
 
@@ -20,7 +23,7 @@ $sidebar-width: 260px;
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 16px;
   height: 100vh;
   padding: 28px 18px;
   overflow-y: auto;
@@ -40,13 +43,41 @@ $sidebar-width: 260px;
 }
 
 .admin-brand {
-  padding: 0 14px;
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
 
   @include mobile {
     padding: 0;
+  }
+}
+
+.admin-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--green);
+  border-radius: 9px;
+}
+
+.admin-nav-label {
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+
+  @include mobile {
+    display: none;
   }
 }
 
@@ -67,25 +98,30 @@ $sidebar-width: 260px;
 }
 
 .admin-account {
-  display: grid;
-  gap: 4px;
-  padding-top: 18px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-top: 16px;
   border-top: 1px solid var(--line);
 
   strong,
-  span {
-    padding: 0 14px;
+  span,
+  a {
+    display: block;
   }
 
-  span {
+  strong {
+    font-size: 14px;
+  }
+
+  span,
+  a {
     font-size: 12px;
     color: var(--muted);
-    overflow-wrap: anywhere;
   }
 
   a {
-    @include nav-link;
-    margin-top: 8px;
+    margin-top: 2px;
   }
 
   @include mobile {
@@ -93,62 +129,218 @@ $sidebar-width: 260px;
     padding: 0;
     border: 0;
 
-    strong,
-    span {
+    div {
       display: none;
-    }
-
-    a {
-      margin: 0;
     }
   }
 }
 
-.admin-main {
-  height: 100vh;
+.admin-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #38582a;
+  font-size: 14px;
+  font-weight: 700;
+  background: #edf2e5;
+  border-radius: 50%;
+}
+
+.content.admin-main {
+  width: auto;
+  max-width: none;
   min-width: 0;
-  overflow: auto;
+  margin: 0;
+  padding: 0;
+  background: #fff;
 
+  &:not(:has(.admin-head, .admin-record)) {
+    padding: 22px 28px 40px;
+  }
+}
+
+.admin-main {
   h1 {
-    font-size: 32px;
-    line-height: 1.2;
+    font-size: 22px;
+    line-height: 1.25;
     letter-spacing: -0.03em;
-  }
-
-  .table-scroll {
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
-  table {
-    width: 100%;
   }
 
   td:has(.admin-actions),
   .admin-actions-col {
-    width: 96px;
+    width: 88px;
     text-align: right;
-  }
-
-  @include mobile {
-    height: auto;
-    overflow: visible;
   }
 }
 
 .admin-main:has(.admin-fill) {
   display: flex;
   flex-direction: column;
+  height: 100vh;
   overflow: hidden;
 }
 
+.admin-head {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px 18px;
+  border-bottom: 1px solid var(--line);
+
+  h1,
+  p {
+    margin: 0;
+  }
+
+  p {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+
+  @include mobile {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px 16px;
+  }
+}
+
+.admin-head-tools {
+  flex: none;
+}
+
 .admin-filter {
-  max-width: 260px;
-  margin: 0 0 16px;
+  width: 220px;
+  max-width: 100%;
+  margin: 0;
+}
+
+.admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+
+  @include mobile {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.admin-metric {
+  display: grid;
+  gap: 8px;
+  padding: 18px 28px;
+  border-right: 1px solid var(--line);
+
+  span {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  strong {
+    font-size: 28px;
+    letter-spacing: -0.04em;
+  }
+
+  &:last-child {
+    border-right: 0;
+  }
+
+  &:hover {
+    background: #f7f8f5;
+  }
+}
+
+.admin-links {
+  display: grid;
+  gap: 8px;
+  padding: 18px 28px 28px;
+
+  a {
+    font-size: 14px;
+    color: #38582a;
+  }
+}
+
+.admin-sheet {
+  width: 100%;
+  overflow-x: auto;
+  background: #fff;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 13px 14px;
+    font-size: 14px;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #e7ece4;
+  }
+
+  th {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    background: #fff;
+  }
+
+  th:first-child,
+  td:first-child {
+    padding-left: 28px;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 28px;
+  }
+
+  a {
+    font-weight: 600;
+    color: inherit;
+  }
+
+  tbody tr:hover {
+    background: #f7f8f5;
+  }
+
+  tbody tr.is-attention {
+    background: #fbf6df;
+  }
+
+  tbody tr.is-attention:hover {
+    background: #f6f0cc;
+  }
+}
+
+.admin-empty {
+  padding: 48px 28px;
+  color: var(--muted);
+}
+
+.admin-list-foot {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px 28px;
+}
+
+.admin-record {
+  padding: 8px 28px 40px;
+
+  > .back-link {
+    display: inline-flex;
+    margin: 18px 0;
+  }
 }
 
 .admin-count {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 13px;
   color: var(--muted);
 }
@@ -189,7 +381,7 @@ $sidebar-width: 260px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 16px;
+  margin: 0;
 }
 
 .admin-page {
@@ -228,8 +420,7 @@ $sidebar-width: 260px;
   min-height: 0;
   overflow: hidden;
   background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  border-top: 1px solid var(--line);
 
   @include mobile {
     display: flex;
