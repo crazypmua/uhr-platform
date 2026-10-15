@@ -171,6 +171,14 @@ class CompanyMessageIn(BaseModel):
 class SelectionContactIn(BaseModel):
     body: str = Field(default="", max_length=4000)
     channel: str = "chat"
+    project: str = Field(default="", max_length=255)
+    site_address: str = ""
+    start_date: date | None = None
+    duration: str = Field(default="", max_length=128)
+    schedule: str = Field(default="", max_length=255)
+    workers_count: int | None = Field(default=None, ge=1, le=100)
+    work_description: str = Field(default="", max_length=4000)
+    requirements: str = Field(default="", max_length=4000)
 
 
 class CompanyRegistration(BaseModel):

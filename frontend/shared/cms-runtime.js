@@ -121,8 +121,8 @@ export async function renderCmsPage() {
       return false;
     }
   }
-  // The root path belongs to the app (hash routes #catalog, #login...), CMS pages live on their own paths
-  if (!parts.length) return false;
+  // The root path belongs to the app (hash routes #catalog, #login...). /request is the selection form.
+  if (!parts.length || (parts.length === 1 && parts[0] === "request")) return false;
   const slug = parts.join("/");
   try {
     const page = await json(`${API}/pages/${site}/${encodeURIComponent(slug)}`);

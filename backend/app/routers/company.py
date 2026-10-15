@@ -560,14 +560,20 @@ def contact_about_selection(
     db: Session = Depends(get_db),
 ):
     channel = payload.channel if payload.channel in {"chat", "email"} else "chat"
-    body = payload.body.strip() or (
+    body = payload.body.strip() or payload.work_description.strip() or (
         "Graag contact per e-mail over deze aanvraag."
         if channel == "email"
         else "Graag deze selectie bespreken in de chat."
     )
     now = datetime.now(timezone.utc)
     item = WorkRequest(
-        project="Selectie",
+        project=payload.project.strip() or "Selectie",
+        site_address=payload.site_address,
+        start_date=payload.start_date,
+        duration=payload.duration,
+        schedule=payload.schedule,
+        work_description=payload.work_description,
+        requirements=payload.requirements,
         company_id=company.id,
         status="submitted",
         public_id=f"tmp-{uuid4().hex[:12]}",
@@ -578,7 +584,7 @@ def contact_about_selection(
     db.flush()
     item.public_id = f"A-{2000 + item.id}"
     picks = _sync_selection(db, item, company)
-    item.workers_count = len(picks)
+    item.workers_count = payload.workers_count or len(picks)
     db.query(CompanyPick).filter(
         CompanyPick.company_id == company.id,
         CompanyPick.craftsman_id.in_([row.id for row in picks]),
