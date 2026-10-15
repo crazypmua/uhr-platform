@@ -274,6 +274,39 @@ function documentsBlock(documents = []) {
     .join("")}</div>`;
 }
 
+function isoBlock(item) {
+  const iso = item.sna_details || {};
+  const extracted = iso.extracted || {};
+  const verdict =
+    iso.confidence === "high"
+      ? "Схоже на ISO 9001"
+      : iso.guess === "other_iso"
+        ? "Схоже на інший ISO, не на 9001"
+        : iso.confidence === "medium"
+          ? "Схоже на сертифікат якості, номер не прочитано"
+          : "Не вдалося впізнати — перевірте файл";
+  return `<div class="card" style="margin:24px 0">
+    <h3>Сертифікат ISO</h3>
+    <p><span class="badge ${iso.confidence === "high" ? "" : "yellow"}">${esc(verdict)}</span></p>
+    ${fieldList([
+      ["Стандарт", extracted.standard],
+      ["Інші ISO у файлі", (iso.standards || []).join(", ")],
+      ["Орган", extracted.issuer],
+      ["Компанія з файлу", extracted.company_name],
+      ["KvK з файлу", extracted.kvk],
+      ["Номер сертифіката", extracted.certificate_number],
+      ["Дійсний до", extracted.valid_until],
+      ["Прочитаний текст", extracted.excerpt],
+      ["Перевірено", fmtDate(iso.checked_at)],
+    ])}
+  </div>`;
+}
+
+function certBlock(item) {
+  if (item.company_type === "contractor" || item.sna_details?.kind === "iso") return isoBlock(item);
+  return snaBlock(item);
+}
+
 function snaBlock(item) {
   const sna = item.sna_details || {};
   if (!sna.checked_at) return "";
@@ -391,10 +424,11 @@ async function companyDetail(id) {
       ["Регіон", item.region],
       ["Потрібна спеціалізація", item.desired_profession],
       ["Очікувана кількість", item.expected_count],
-      ["SNA", item.sna],
+      ["Тип", item.company_type === "contractor" ? "Генпідрядник" : item.company_type === "agency" ? "Агентство з працевлаштування" : ""],
+      [item.company_type === "contractor" ? "ISO" : "SNA", item.sna],
     ])}
     <div class="card" style="margin:24px 0"><h3>Коментар компанії</h3><p>${esc(item.description || "—")}</p></div>
-    ${snaBlock(item)}
+    ${certBlock(item)}
     ${documentsBlock(item.documents)}
     ${statusForm("companies", item)}</div>`;
 }
@@ -521,15 +555,18 @@ function anketaLabel(count) {
   return `${count} анкет`;
 }
 
-function selectionBlock(people, project) {
+function selectionBlock(people, project, requestId) {
   if (people?.length) {
     const cards = people
       .map(
-        (person) => `<button type="button" class="admin-pick${String(state.openAnketa) === String(person.id) ? " is-open" : ""}" data-anketa="${person.id}">
-          <b>${esc(person.name || "Без імені")}</b>
-          <span><small>Професія</small>${esc(person.profession || "—")}</span>
-          <span><small>Місто</small>${esc(person.city || "—")}</span>
-        </button>`
+        (person) => `<div class="admin-pick-wrap">
+          <button type="button" class="admin-pick-remove" data-drop-anketa="${person.id}" data-request="${requestId}" aria-label="Прибрати з вибору">${icon(ICONS.trash)}</button>
+          <button type="button" class="admin-pick${String(state.openAnketa) === String(person.id) ? " is-open" : ""}" data-anketa="${person.id}">
+            <b>${esc(person.name || "Без імені")}</b>
+            <span><small>Професія</small>${esc(person.profession || "—")}</span>
+            <span><small>Місто</small>${esc(person.city || "—")}</span>
+          </button>
+        </div>`
       )
       .join("");
     return `<section class="admin-selection"><strong>Обрані анкети</strong><div class="admin-pick-list">${cards}</div></section>`;
@@ -621,7 +658,7 @@ async function messagesPage(id) {
         <div><strong>${esc(opened.public_id)} · ${esc(opened.project || "Без назви")}</strong><span>${esc(company?.company_name || "")}</span></div>
         <a href="${adminHref(`requests/${opened.id}`)}">Заявка</a>
       </header>
-      ${selectionBlock(people, opened.project || company?.project)}
+      ${selectionBlock(people, opened.project || company?.project, opened.id)}
       <div class="admin-bubbles">
         ${
           opened.messages
@@ -634,7 +671,10 @@ async function messagesPage(id) {
         }
       </div>
       <form id="chat-form" class="admin-composer" data-id="${opened.id}">
-        <textarea name="message" aria-label="Повідомлення" placeholder="Написати повідомлення…" required></textarea>
+        <div class="admin-composer-field">
+          <textarea name="message" aria-label="Повідомлення" placeholder="Написати повідомлення…" required></textarea>
+          <p class="admin-nl" hidden></p>
+        </div>
         <button class="btn">Надіслати</button>
       </form>`
     : `<div class="admin-thread-empty"><p>Оберіть заявку зі списку зліва.</p></div>`;
@@ -678,7 +718,10 @@ function anketaText(item) {
   const files = (item.documents || []).map((doc) => doc.original_name).filter(Boolean);
   if (files.length) rows.push(["Файли", files.join(", ")]);
   return rows
-    .map(([label, value]) => `<p><small>${esc(label)}</small>${esc(value)}</p>`)
+    .map(
+      ([label, value]) =>
+        `<button type="button" class="admin-anketa-field" data-insert="${esc(`${label}: ${value}`)}"><small>${esc(label)}</small>${esc(value)}</button>`
+    )
     .join("");
 }
 
@@ -702,7 +745,7 @@ async function openAnketa(id) {
   pane.innerHTML = `<p>Завантаження…</p>`;
   try {
     const item = await request(`/admin/craftsmen/${id}`);
-    pane.innerHTML = `<header><strong>${esc(item.name || "Без імені")}</strong><button type="button" data-anketa-close>Закрити</button></header><div class="admin-anketa-body">${anketaText(item) || "<p>Заповнених полів немає.</p>"}</div>`;
+    pane.innerHTML = `<header><div><strong>${esc(item.name || "Без імені")}</strong><a href="${adminHref(`masters/${item.id}`)}">Відкрити анкету</a></div><button type="button" data-anketa-close>Закрити</button></header><div class="admin-anketa-body">${anketaText(item) || "<p>Заповнених полів немає.</p>"}</div>`;
   } catch (error) {
     pane.innerHTML = `<header><strong>Анкета</strong><button type="button" data-anketa-close>Закрити</button></header><p>${esc(error.message)}</p>`;
   }
@@ -746,6 +789,34 @@ async function render() {
   if (page === "cms") await mountCms(arg);
   if (state.user) startInboxWatch();
 }
+
+let translateTimer = 0;
+app.addEventListener("input", (event) => {
+  const area = event.target;
+  if (!(area instanceof HTMLTextAreaElement) || area.name !== "message" || !area.closest("#chat-form")) return;
+  const preview = area.parentElement?.querySelector(".admin-nl");
+  window.clearTimeout(translateTimer);
+  const text = area.value.trim();
+  if (!preview) return;
+  if (!text || !/[\u0400-\u04FF]/.test(text)) {
+    preview.hidden = true;
+    preview.textContent = "";
+    return;
+  }
+  preview.hidden = false;
+  preview.textContent = "Переклад…";
+  translateTimer = window.setTimeout(async () => {
+    try {
+      const data = await request("/admin/translate", { method: "POST", json: { text } });
+      if (area.value.trim() !== text) return;
+      const dutch = data.text && data.text !== text ? data.text : "";
+      preview.hidden = !dutch;
+      preview.textContent = dutch;
+    } catch {
+      if (area.value.trim() === text) preview.hidden = true;
+    }
+  }, 450);
+});
 
 app.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -811,6 +882,36 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
+  const drop = event.target.closest("[data-drop-anketa]");
+  if (drop) {
+    event.preventDefault();
+    const draft = document.querySelector("#chat-form textarea")?.value || "";
+    try {
+      await request(`/admin/requests/${drop.dataset.request}/selection/${drop.dataset.dropAnketa}`, { method: "DELETE" });
+      if (state.openAnketa === drop.dataset.dropAnketa) state.openAnketa = "";
+      await render();
+      const area = document.querySelector("#chat-form textarea");
+      if (area && draft) {
+        area.value = draft;
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } catch (error) {
+      toast(error.message);
+    }
+    return;
+  }
+  const insert = event.target.closest("[data-insert]");
+  if (insert) {
+    event.preventDefault();
+    const area = document.querySelector("#chat-form textarea");
+    if (!area) return;
+    const line = insert.dataset.insert;
+    const current = area.value.replace(/\s*$/, "");
+    area.value = current ? `${current}\n${line}` : line;
+    area.focus();
+    area.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
   const anketa = event.target.closest("[data-anketa]");
   if (anketa) {
     event.preventDefault();

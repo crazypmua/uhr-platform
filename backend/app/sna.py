@@ -120,6 +120,22 @@ def _parse(text: str) -> dict:
     return data
 
 
+def document_text(content: bytes, mime: str) -> str:
+    """Text from a PDF, or OCR when the PDF is a scan or the file is a photo."""
+    is_pdf = mime == "application/pdf" or content.startswith(b"%PDF")
+    text = ""
+    try:
+        if is_pdf:
+            text = _pdf_text(content)
+            if len(re.sub(r"\s+", "", text)) < 80:
+                text = _ocr_pdf(content) or text
+        elif mime.startswith("image/"):
+            text = _ocr_bytes(content)
+    except Exception as exc:
+        log.warning("Cannot read certificate file: %s", exc)
+    return text
+
+
 def read_certificate(content: bytes, mime: str) -> dict:
     """A text PDF is read directly. A photo, screenshot or scan is recognized as text."""
     is_pdf = mime == "application/pdf" or content.startswith(b"%PDF")

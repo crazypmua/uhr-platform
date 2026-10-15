@@ -524,10 +524,12 @@ body[data-site="admin"] {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .admin-selection {
   display: grid;
+  flex: none;
   gap: 8px;
   padding: 12px 16px;
   background: #fbf6df;
@@ -545,8 +547,37 @@ body[data-site="admin"] {
 
 .admin-pick-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  max-width: 100%;
+  padding: 14px 2px 4px;
+  overflow-x: auto;
+}
+
+.admin-pick-wrap {
+  position: relative;
+  flex: none;
+}
+
+.admin-pick-remove {
+  position: absolute;
+  top: -11px;
+  right: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: #8a3b32;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+
+  svg {
+    width: 13px;
+    height: 13px;
+  }
 }
 
 .admin-pick {
@@ -596,8 +627,19 @@ body[data-site="admin"] {
     justify-content: space-between;
     margin-bottom: 14px;
 
+    div {
+      display: grid;
+      gap: 4px;
+    }
+
     strong {
       font-size: 16px;
+    }
+
+    a {
+      color: #38582a;
+      font-size: 12px;
+      font-weight: 700;
     }
 
     button {
@@ -606,6 +648,23 @@ body[data-site="admin"] {
       font-size: 12px;
       font-weight: 700;
       background: transparent;
+    }
+  }
+
+  .admin-anketa-field {
+    display: block;
+    width: 100%;
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    text-align: left;
+    background: #f7f8f4;
+    border: 1px solid transparent;
+    border-radius: 10px;
+
+    &:hover,
+    &:focus-visible {
+      background: #eef3e6;
+      border-color: #173e34;
     }
   }
 
@@ -652,10 +711,11 @@ body[data-site="admin"] {
 
 .admin-bubbles {
   display: flex;
-  flex: none;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
-  height: 560px;
+  min-height: 0;
+  max-height: 560px;
   padding: 18px;
   overflow: auto;
   background: #f7f8f4;
@@ -703,13 +763,14 @@ body[data-site="admin"] {
 
 .admin-composer {
   display: flex;
+  flex: none;
   gap: 10px;
   align-items: flex-end;
   padding: 14px;
   border-top: 1px solid var(--line);
 
   textarea {
-    flex: 1;
+    width: 100%;
     min-height: 46px;
     max-height: 140px;
     resize: vertical;
@@ -718,4 +779,18 @@ body[data-site="admin"] {
   .btn {
     flex: none;
   }
+}
+
+.admin-composer-field {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-nl {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }

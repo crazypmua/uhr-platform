@@ -174,6 +174,7 @@ class SelectionContactIn(BaseModel):
 
 
 class CompanyRegistration(BaseModel):
+    company_type: Literal["agency", "contractor"]
     company_name: str = Field(min_length=1, max_length=255)
     kvk: str = Field(pattern=r"^\d{8}$")
     address: str = ""

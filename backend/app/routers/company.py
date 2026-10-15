@@ -51,6 +51,7 @@ from ..schemas import (
     LoginIn,
     PasswordResetIn,
 )
+from ..iso import check_certificate as check_iso
 from ..sna import check_certificate
 from .public import _save_with_documents, _validation_detail
 
@@ -234,11 +235,12 @@ def google_callback(request: Request, code: str = "", state: str = "", db: Sessi
     return response
 
 
-async def _read_certificate(file: UploadFile) -> tuple[str, str, bytes]:
-    uploads = await read_uploads({"sna": [file]}, "company")
-    if not uploads.get("sna"):
-        raise HTTPException(status_code=422, detail="Voeg het SNA-certificaat toe")
-    return uploads["sna"][0]
+async def _read_certificate(file: UploadFile, kind: str) -> tuple[str, str, bytes]:
+    uploads = await read_uploads({kind: [file]}, "company")
+    if not uploads.get(kind):
+        detail = "Voeg het ISO 9001-certificaat toe" if kind == "iso" else "Voeg het SNA-certificaat toe"
+        raise HTTPException(status_code=422, detail=detail)
+    return uploads[kind][0]
 
 
 @router.post("/sna/check")
@@ -247,14 +249,24 @@ async def sna_check(
     kvk: str = Form(""),
     _account: CompanyAccount = Depends(get_company_account),
 ):
-    _, mime, content = await _read_certificate(file)
+    _, mime, content = await _read_certificate(file, "sna")
     return check_certificate(content, mime, kvk.strip())
+
+
+@router.post("/iso/check")
+async def iso_check(
+    file: UploadFile = File(...),
+    _account: CompanyAccount = Depends(get_company_account),
+):
+    _, mime, content = await _read_certificate(file, "iso")
+    return check_iso(content, mime)
 
 
 @router.post("/registration")
 async def registration(
     data: str = Form(...),
-    sna: UploadFile = File(...),
+    sna: UploadFile | None = File(None),
+    iso: UploadFile | None = File(None),
     account: CompanyAccount = Depends(get_company_account),
     db: Session = Depends(get_db),
 ):
@@ -264,19 +276,31 @@ async def registration(
         payload = CompanyRegistration.model_validate_json(data)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
-    certificate = await _read_certificate(sna)
-    details = check_certificate(certificate[2], certificate[1], payload.kvk)
+    contractor = payload.company_type == "contractor"
+    upload = iso if contractor else sna
+    if not upload or not upload.filename:
+        raise HTTPException(
+            status_code=422,
+            detail="Voeg het ISO 9001-certificaat toe" if contractor else "Voeg het SNA-certificaat toe",
+        )
+    certificate = await _read_certificate(upload, "iso" if contractor else "sna")
+    if contractor:
+        details = check_iso(certificate[2], certificate[1])
+        label = "ISO 9001" if details["verified"] else "ISO — controle"
+    else:
+        details = check_certificate(certificate[2], certificate[1], payload.kvk)
+        label = "Ja" if details["verified"] else "In controle"
     now = datetime.now(timezone.utc)
     item = Company(
         **payload.model_dump(),
         email=account.email,
         status="pending",
-        sna="Ja" if details["verified"] else "In controle",
+        sna=label,
         sna_verified=details["verified"],
         sna_details=details,
         consent_at=now,
     )
-    _save_with_documents(db, item, "company", {"sna": [certificate]})
+    _save_with_documents(db, item, "company", {("iso" if contractor else "sna"): [certificate]})
     account.company_id = item.id
     db.commit()
     return {"id": item.id, "status": item.status, "email": account.email, "sna_verified": item.sna_verified}
@@ -642,16 +666,16 @@ async def company_message_stream(request: Request, company: Company = Depends(ge
 
 
 def _notify_admin(item: WorkRequest, msg: Message) -> None:
-    publish(
-        {
-            "type": "message",
-            "request_id": item.id,
-            "message_id": msg.id,
-            "audience": "admin",
-            "sender_role": msg.sender_role,
-            "body": msg.body,
-            "public_id": item.public_id,
-            "project": item.project or "",
-            "company_name": item.company.company_name if item.company else "",
-        }
-    )
+    payload = {
+        "type": "message",
+        "request_id": item.id,
+        "message_id": msg.id,
+        "sender_role": msg.sender_role,
+        "body": msg.body,
+        "public_id": item.public_id,
+        "project": item.project or "",
+        "company_name": item.company.company_name if item.company else "",
+        "company_id": item.company_id,
+    }
+    publish({**payload, "audience": "admin"})
+    publish({**payload, "audience": "company"})

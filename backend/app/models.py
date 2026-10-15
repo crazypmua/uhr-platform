@@ -62,6 +62,7 @@ class Company(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")
     company_name: Mapped[str] = mapped_column(String(255), default="")
+    company_type: Mapped[str] = mapped_column(String(32), default="")
     kvk: Mapped[str] = mapped_column(String(16), default="")
     btw: Mapped[str] = mapped_column(String(64), default="")
     address: Mapped[str] = mapped_column(Text, default="")

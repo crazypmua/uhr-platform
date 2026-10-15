@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request as HttpRequest
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.exc import ProgrammingError
@@ -32,6 +33,7 @@ from ..models import (
 )
 from ..notifications import company_approved, craftsman_approved
 from ..schemas import MessageIn, RequestStatusUpdate, SiteSettingsUpdate, StatusUpdate, TextsPut, d, dt
+from ..translate import to_dutch
 from ..seed_texts import PAGES, SITES
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
@@ -157,7 +159,8 @@ def _company_out(item: Company, db: Session, full: bool = False) -> dict:
         "id": item.id,
         "status": item.status,
         "status_label": CRAFTSMAN_STATUSES.get(item.status, item.status),
-        "company_name": item.company_name,
+            "company_name": item.company_name,
+        "company_type": item.company_type,
         "contact_name": item.contact_name,
         "email": item.email,
         "phone": item.phone,
@@ -587,7 +590,8 @@ def send_message(payload: MessageIn, user: User = Depends(get_current_admin), db
     item = db.get(Request, payload.request_id)
     if not item:
         raise HTTPException(status_code=404, detail="Заявку не знайдено")
-    msg = Message(request_id=item.id, sender_role="admin", sender_id=user.id, body=payload.body.strip())
+    body = to_dutch(payload.body.strip()) or payload.body.strip()
+    msg = Message(request_id=item.id, sender_role="admin", sender_id=user.id, body=body)
     db.add(msg)
     db.commit()
     db.refresh(msg)
@@ -603,7 +607,53 @@ def send_message(payload: MessageIn, user: User = Depends(get_current_admin), db
             "body": msg.body,
         }
     )
-    return {"ok": True, "id": msg.id}
+    return {"ok": True, "id": msg.id, "body": msg.body}
+
+
+class TranslateIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+@router.post("/translate")
+def translate_text(payload: TranslateIn, _: User = Depends(get_current_admin)):
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Порожній текст")
+    return {"text": to_dutch(text) or text}
+
+
+@router.delete("/requests/{request_id}/selection/{craftsman_id}")
+def drop_selection(
+    request_id: int,
+    craftsman_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.get(Request, request_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Заявку не знайдено")
+    try:
+        rows = db.query(RequestSelection).filter(RequestSelection.request_id == item.id).all()
+    except ProgrammingError:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="Вибір ще не збережено")
+    if not rows and item.project == "Selectie" and item.company_id:
+        picks = (
+            db.query(CompanyPick)
+            .filter(CompanyPick.company_id == item.company_id)
+            .all()
+        )
+        for pick in picks:
+            if pick.craftsman_id == craftsman_id:
+                continue
+            db.add(RequestSelection(request_id=item.id, craftsman_id=pick.craftsman_id))
+    else:
+        db.query(RequestSelection).filter(
+            RequestSelection.request_id == item.id,
+            RequestSelection.craftsman_id == craftsman_id,
+        ).delete()
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/texts/meta")
