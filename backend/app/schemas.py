@@ -169,7 +169,7 @@ class CompanyMessageIn(BaseModel):
 
 
 class SelectionContactIn(BaseModel):
-    body: str = Field(min_length=1, max_length=4000)
+    body: str = Field(default="", max_length=4000)
     channel: str = "chat"
 
 

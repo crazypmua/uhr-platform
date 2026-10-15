@@ -560,33 +560,29 @@ def contact_about_selection(
     db: Session = Depends(get_db),
 ):
     channel = payload.channel if payload.channel in {"chat", "email"} else "chat"
-    body = payload.body.strip()
-    if not body:
-        raise HTTPException(status_code=422, detail="Schrijf een bericht")
-    item = (
-        db.query(WorkRequest)
-        .filter(
-            WorkRequest.company_id == company.id,
-            WorkRequest.project == "Selectie",
-            WorkRequest.status.notin_(["done", "cancelled"]),
-        )
-        .order_by(WorkRequest.created_at.desc())
-        .first()
+    body = payload.body.strip() or (
+        "Graag contact per e-mail over deze aanvraag."
+        if channel == "email"
+        else "Graag deze selectie bespreken in de chat."
     )
     now = datetime.now(timezone.utc)
-    if not item:
-        item = WorkRequest(
-            project="Selectie",
-            company_id=company.id,
-            status="submitted",
-            public_id=f"tmp-{uuid4().hex[:12]}",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(item)
-        db.flush()
-        item.public_id = f"A-{2000 + item.id}"
+    item = WorkRequest(
+        project="Selectie",
+        company_id=company.id,
+        status="submitted",
+        public_id=f"tmp-{uuid4().hex[:12]}",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(item)
+    db.flush()
+    item.public_id = f"A-{2000 + item.id}"
     picks = _sync_selection(db, item, company)
+    item.workers_count = len(picks)
+    db.query(CompanyPick).filter(
+        CompanyPick.company_id == company.id,
+        CompanyPick.craftsman_id.in_([row.id for row in picks]),
+    ).delete(synchronize_session=False)
     msg = Message(request_id=item.id, sender_role="company", body=body, created_at=now)
     db.add(msg)
     item.updated_at = now

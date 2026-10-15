@@ -478,6 +478,7 @@ async function requestDetail(id) {
       ["Кількість майстрів", item.workers_count],
       ["Майстер", item.craftsman ? `#${item.craftsman.id} ${item.craftsman.profession}` : "Ще не призначено"],
     ])}
+    ${requestPeople(item)}
     <div class="card" style="margin:24px 0"><h3>Опис робіт</h3><p>${esc(item.work_description || "—")}</p><h3>Додаткові вимоги</h3><p>${esc(item.requirements || "—")}</p></div>
     <form id="request-status-form" class="card" data-id="${item.id}">
       <label><span>Статус</span><select name="status">${statuses
@@ -556,6 +557,21 @@ function anketaLabel(count) {
   if (n1 === 1) return `${count} анкета`;
   if (n1 > 1 && n1 < 5) return `${count} анкети`;
   return `${count} анкет`;
+}
+
+function requestPeople(item) {
+  const people = item.selection || [];
+  if (!people.length) return "";
+  const cards = people
+    .map(
+      (person) => `<a class="admin-pick" href="${adminHref(`masters/${person.id}`)}">
+        <b>${esc(person.name || "Без імені")}</b>
+        <span><small>Професія</small>${esc(person.profession || "—")}</span>
+        <span><small>Місто</small>${esc(person.city || "—")}</span>
+      </a>`
+    )
+    .join("");
+  return `<section class="admin-selection"><strong>Обрані анкети</strong><div class="admin-pick-list">${cards}</div></section>`;
 }
 
 function selectionBlock(people, project, requestId) {

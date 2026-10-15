@@ -436,6 +436,7 @@ def request_detail(item_id: int, db: Session = Depends(get_db)):
         "admin_comment": item.admin_comment,
         "company": _company_out(item.company, db) if item.company else None,
         "craftsman": _craftsman_out(item.craftsman, db) if item.craftsman else None,
+        "selection": _selection_profiles(db, item),
         "messages": [
             {
                 "id": msg.id,
