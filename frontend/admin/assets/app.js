@@ -4,7 +4,7 @@ import { ICONS } from "./icons.js";
 import { adminHref, adminRoute, adminSearch, adoptLegacyHash, navigate } from "./path.js";
 
 const app = document.querySelector("#app");
-const state = { user: null, toast: "", openAnketa: "" };
+const state = { user: null, toast: "", openAnketa: "", translateOpen: false, draft: "", draftNl: "" };
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -303,7 +303,10 @@ function isoBlock(item) {
 }
 
 function certBlock(item) {
-  if (item.company_type === "contractor" || item.sna_details?.kind === "iso") return isoBlock(item);
+  if (item.company_type === "contractor" && item.sna_details?.kind !== "iso") {
+    return `<div class="card" style="margin:24px 0"><h3>Сертифікати генпідрядника</h3><p>ISO 9001 і VCA завантажені без розпізнавання. Перевірте файли нижче.</p></div>`;
+  }
+  if (item.sna_details?.kind === "iso") return isoBlock(item);
   return snaBlock(item);
 }
 
@@ -425,7 +428,7 @@ async function companyDetail(id) {
       ["Потрібна спеціалізація", item.desired_profession],
       ["Очікувана кількість", item.expected_count],
       ["Тип", item.company_type === "contractor" ? "Генпідрядник" : item.company_type === "agency" ? "Агентство з працевлаштування" : ""],
-      [item.company_type === "contractor" ? "ISO" : "SNA", item.sna],
+      [item.company_type === "contractor" ? "Сертифікати" : "SNA", item.sna],
     ])}
     <div class="card" style="margin:24px 0"><h3>Коментар компанії</h3><p>${esc(item.description || "—")}</p></div>
     ${certBlock(item)}
@@ -670,16 +673,18 @@ async function messagesPage(id) {
             .join("") || `<div class="admin-thread-empty">Повідомлень ще немає.</div>`
         }
       </div>
-      <form id="chat-form" class="admin-composer" data-id="${opened.id}">
-        <div class="admin-composer-field">
+      <form id="chat-form" class="admin-composer${state.translateOpen ? " is-split" : ""}" data-id="${opened.id}">
+        <div class="admin-composer-split">
           <textarea name="message" aria-label="Повідомлення" placeholder="Написати повідомлення…" required></textarea>
-          <p class="admin-nl" hidden></p>
+          <textarea name="translation" class="admin-translation" aria-label="Nederlands" placeholder="Nederlands…" ${state.translateOpen ? "" : "tabindex=\"-1\" aria-hidden=\"true\""}></textarea>
         </div>
-        <button class="btn">Надіслати</button>
+        <div class="admin-composer-bar">
+          <button type="button" class="admin-lang${state.translateOpen ? " is-on" : ""}" data-translate aria-pressed="${state.translateOpen ? "true" : "false"}">Nederlands</button>
+          <button class="btn admin-send">Надіслати</button>
+        </div>
       </form>`
     : `<div class="admin-thread-empty"><p>Оберіть заявку зі списку зліва.</p></div>`;
-  return `${pageHead("Повідомлення", "Листування з компаніями по заявках.")}
-    <div class="admin-fill"><div class="admin-inbox${state.openAnketa ? " has-anketa" : ""}"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section><aside class="admin-anketa"></aside></div></div>`;
+  return `<div class="admin-fill"><div class="admin-inbox${state.openAnketa ? " has-anketa" : ""}"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section><aside class="admin-anketa"></aside></div></div>`;
 }
 
 function filledValue(value) {
@@ -784,6 +789,7 @@ async function render() {
     }
   }
   icons();
+  restoreComposer();
   document.querySelector(".admin-bubbles")?.scrollTo(0, 99999);
   if (page === "messages" && state.openAnketa) await openAnketa(state.openAnketa);
   if (page === "cms") await mountCms(arg);
@@ -791,31 +797,59 @@ async function render() {
 }
 
 let translateTimer = 0;
-app.addEventListener("input", (event) => {
-  const area = event.target;
-  if (!(area instanceof HTMLTextAreaElement) || area.name !== "message" || !area.closest("#chat-form")) return;
-  const preview = area.parentElement?.querySelector(".admin-nl");
+
+function rememberComposer() {
+  const form = document.querySelector("#chat-form");
+  if (!form) return;
+  state.draft = form.elements.message?.value || "";
+  state.draftNl = form.elements.translation?.value || "";
+}
+
+function restoreComposer() {
+  const form = document.querySelector("#chat-form");
+  if (!form) return;
+  if (state.draft) form.elements.message.value = state.draft;
+  if (state.translateOpen && state.draftNl) form.elements.translation.value = state.draftNl;
+}
+
+async function dutchFor(text) {
+  const data = await request("/admin/translate", { method: "POST", json: { text } });
+  return data.text && data.text !== text ? data.text : text;
+}
+
+function scheduleDutch(form) {
+  const area = form.elements.message;
+  const dutch = form.elements.translation;
   window.clearTimeout(translateTimer);
+  if (!state.translateOpen || !dutch || dutch.dataset.dirty === "1") return;
   const text = area.value.trim();
-  if (!preview) return;
-  if (!text || !/[\u0400-\u04FF]/.test(text)) {
-    preview.hidden = true;
-    preview.textContent = "";
+  if (!text) {
+    dutch.value = "";
+    state.draftNl = "";
     return;
   }
-  preview.hidden = false;
-  preview.textContent = "Переклад…";
+  if (!/[\u0400-\u04FF]/.test(text)) {
+    dutch.value = text;
+    state.draftNl = text;
+    return;
+  }
   translateTimer = window.setTimeout(async () => {
     try {
-      const data = await request("/admin/translate", { method: "POST", json: { text } });
-      if (area.value.trim() !== text) return;
-      const dutch = data.text && data.text !== text ? data.text : "";
-      preview.hidden = !dutch;
-      preview.textContent = dutch;
+      if (area.value.trim() !== text || dutch.dataset.dirty === "1") return;
+      dutch.value = await dutchFor(text);
+      state.draftNl = dutch.value;
     } catch {
-      if (area.value.trim() === text) preview.hidden = true;
+      /* оригінал лишається, переклад можна дописати вручну */
     }
   }, 450);
+}
+
+app.addEventListener("input", (event) => {
+  const area = event.target;
+  if (!(area instanceof HTMLTextAreaElement) || !area.closest("#chat-form")) return;
+  if (area.name === "translation") area.dataset.dirty = area.value.trim() ? "1" : "";
+  rememberComposer();
+  if (area.name === "message") scheduleDutch(area.form);
 });
 
 app.addEventListener("submit", async (event) => {
@@ -858,11 +892,18 @@ app.addEventListener("submit", async (event) => {
       return;
     }
     if (form.id === "chat-form") {
-      const data = new FormData(form);
+      const original = String(new FormData(form).get("message") || "").trim();
+      let body = original;
+      if (state.translateOpen) {
+        const ready = form.elements.translation.value.trim();
+        body = ready || (await dutchFor(original).catch(() => original));
+      }
       await request("/admin/messages", {
         method: "POST",
-        json: { request_id: Number(form.dataset.id), body: data.get("message") },
+        json: { request_id: Number(form.dataset.id), body },
       });
+      state.draft = "";
+      state.draftNl = "";
       await render();
       return;
     }
@@ -882,6 +923,26 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
+  const toggle = event.target.closest("[data-translate]");
+  if (toggle) {
+    event.preventDefault();
+    const form = toggle.closest("#chat-form");
+    state.translateOpen = !state.translateOpen;
+    form.classList.toggle("is-split", state.translateOpen);
+    toggle.classList.toggle("is-on", state.translateOpen);
+    toggle.setAttribute("aria-pressed", state.translateOpen ? "true" : "false");
+    const dutch = form.elements.translation;
+    if (state.translateOpen) {
+      dutch.dataset.dirty = "";
+      dutch.removeAttribute("tabindex");
+      dutch.removeAttribute("aria-hidden");
+      scheduleDutch(form);
+    } else {
+      dutch.setAttribute("tabindex", "-1");
+      dutch.setAttribute("aria-hidden", "true");
+    }
+    return;
+  }
   const drop = event.target.closest("[data-drop-anketa]");
   if (drop) {
     event.preventDefault();

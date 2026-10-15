@@ -29,6 +29,7 @@ DOCUMENT_KINDS = {
     "company": {
         "sna": "SNA-certificaat",
         "iso": "ISO 9001-certificaat",
+        "vca": "VCA-certificaat",
         "company_docs": "Bedrijfsdocumenten",
         "certificates": "Certificaten",
     },

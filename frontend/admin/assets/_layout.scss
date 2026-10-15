@@ -156,7 +156,7 @@ body[data-site="admin"] {
   padding: 0;
   background: #fff;
 
-  &:not(:has(.admin-head, .admin-record)) {
+  &:not(:has(.admin-head, .admin-record, .admin-fill)) {
     padding: 22px 28px 40px;
   }
 }
@@ -764,33 +764,79 @@ body[data-site="admin"] {
 .admin-composer {
   display: flex;
   flex: none;
+  flex-direction: column;
   gap: 10px;
-  align-items: flex-end;
-  padding: 14px;
+  padding: 12px 28px 16px 20px;
+  background: #fff;
   border-top: 1px solid var(--line);
+}
+
+.admin-composer-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+  column-gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: grid-template-columns 0.28s ease, column-gap 0.28s ease;
 
   textarea {
     width: 100%;
-    min-height: 46px;
-    max-height: 140px;
-    resize: vertical;
-  }
-
-  .btn {
-    flex: none;
+    min-width: 0;
+    min-height: 72px;
+    max-height: 160px;
+    padding: 12px 14px;
+    resize: none;
+    background: #f7f8f4;
+    border: 1px solid var(--line);
+    border-radius: 12px;
   }
 }
 
-.admin-composer-field {
-  display: grid;
-  flex: 1;
-  gap: 6px;
-  min-width: 0;
+.admin-translation {
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
 }
 
-.admin-nl {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
+.admin-composer.is-split .admin-composer-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 12px;
+
+  .admin-translation {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.admin-composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.admin-lang {
+  min-height: 36px;
+  padding: 0 14px;
+  color: #173e34;
+  font-size: 13px;
+  font-weight: 700;
+  background: #f4f7ef;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+
+  &.is-on {
+    color: #fff;
+    background: #173e34;
+    border-color: #173e34;
+  }
+}
+
+.admin-send {
+  min-width: 132px;
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 15px;
 }

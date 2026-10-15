@@ -51,7 +51,6 @@ from ..schemas import (
     LoginIn,
     PasswordResetIn,
 )
-from ..iso import check_certificate as check_iso
 from ..sna import check_certificate
 from .public import _save_with_documents, _validation_detail
 
@@ -253,20 +252,12 @@ async def sna_check(
     return check_certificate(content, mime, kvk.strip())
 
 
-@router.post("/iso/check")
-async def iso_check(
-    file: UploadFile = File(...),
-    _account: CompanyAccount = Depends(get_company_account),
-):
-    _, mime, content = await _read_certificate(file, "iso")
-    return check_iso(content, mime)
-
-
 @router.post("/registration")
 async def registration(
     data: str = Form(...),
     sna: UploadFile | None = File(None),
     iso: UploadFile | None = File(None),
+    vca: UploadFile | None = File(None),
     account: CompanyAccount = Depends(get_company_account),
     db: Session = Depends(get_db),
 ):
@@ -277,30 +268,34 @@ async def registration(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
     contractor = payload.company_type == "contractor"
-    upload = iso if contractor else sna
-    if not upload or not upload.filename:
-        raise HTTPException(
-            status_code=422,
-            detail="Voeg het ISO 9001-certificaat toe" if contractor else "Voeg het SNA-certificaat toe",
-        )
-    certificate = await _read_certificate(upload, "iso" if contractor else "sna")
-    if contractor:
-        details = check_iso(certificate[2], certificate[1])
-        label = "ISO 9001" if details["verified"] else "ISO — controle"
-    else:
-        details = check_certificate(certificate[2], certificate[1], payload.kvk)
-        label = "Ja" if details["verified"] else "In controle"
     now = datetime.now(timezone.utc)
+    if contractor:
+        if not iso or not iso.filename:
+            raise HTTPException(status_code=422, detail="Voeg het ISO 9001-certificaat toe")
+        if not vca or not vca.filename:
+            raise HTTPException(status_code=422, detail="Voeg het VCA-certificaat toe")
+        documents = {
+            "iso": [await _read_certificate(iso, "iso")],
+            "vca": [await _read_certificate(vca, "vca")],
+        }
+        label, verified, details = "ISO 9001 + VCA", False, {"kind": "contractor"}
+    else:
+        if not sna or not sna.filename:
+            raise HTTPException(status_code=422, detail="Voeg het SNA-certificaat toe")
+        certificate = await _read_certificate(sna, "sna")
+        details = check_certificate(certificate[2], certificate[1], payload.kvk)
+        documents = {"sna": [certificate]}
+        label, verified = ("Ja", True) if details["verified"] else ("In controle", False)
     item = Company(
         **payload.model_dump(),
         email=account.email,
         status="pending",
         sna=label,
-        sna_verified=details["verified"],
+        sna_verified=verified,
         sna_details=details,
         consent_at=now,
     )
-    _save_with_documents(db, item, "company", {("iso" if contractor else "sna"): [certificate]})
+    _save_with_documents(db, item, "company", documents)
     account.company_id = item.id
     db.commit()
     return {"id": item.id, "status": item.status, "email": account.email, "sna_verified": item.sna_verified}

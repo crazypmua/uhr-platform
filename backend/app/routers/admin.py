@@ -590,8 +590,7 @@ def send_message(payload: MessageIn, user: User = Depends(get_current_admin), db
     item = db.get(Request, payload.request_id)
     if not item:
         raise HTTPException(status_code=404, detail="Заявку не знайдено")
-    body = to_dutch(payload.body.strip()) or payload.body.strip()
-    msg = Message(request_id=item.id, sender_role="admin", sender_id=user.id, body=body)
+    msg = Message(request_id=item.id, sender_role="admin", sender_id=user.id, body=payload.body.strip())
     db.add(msg)
     db.commit()
     db.refresh(msg)
