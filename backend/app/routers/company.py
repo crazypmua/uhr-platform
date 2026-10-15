@@ -1,3 +1,4 @@
+import asyncio
 import json
 import secrets
 import urllib.parse
@@ -8,7 +9,7 @@ from uuid import uuid4
 
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -23,6 +24,8 @@ from ..auth import (
 from ..config import settings
 from ..db import get_db
 from ..documents import kind_label, read_uploads
+from ..inbox import close as close_inbox
+from ..inbox import listen as listen_inbox
 from ..inbox import publish
 from ..mailer import send_mail
 from ..models import (
@@ -352,7 +355,7 @@ def _request_out(item: WorkRequest, db: Session) -> dict:
         "last_message": item.messages[-1].body if item.messages else "",
         "manager_messages": sum(1 for msg in item.messages if msg.sender_role == "admin"),
         "messages": [
-            {"sender_role": msg.sender_role, "body": msg.body, "created_at": msg.created_at.isoformat()}
+            {"id": msg.id, "sender_role": msg.sender_role, "body": msg.body, "created_at": msg.created_at.isoformat()}
             for msg in item.messages
         ],
         "selection": _selection_profiles(db, item.id),
@@ -609,12 +612,42 @@ def company_message(
     return _request_out(item, db)
 
 
+@router.get("/messages/stream")
+async def company_message_stream(request: Request, company: Company = Depends(get_approved_company)):
+    async def events():
+        queue = listen_inbox("company", company.id)
+        try:
+            yield "retry: 2000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        finally:
+            close_inbox(queue)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 def _notify_admin(item: WorkRequest, msg: Message) -> None:
     publish(
         {
             "type": "message",
             "request_id": item.id,
             "message_id": msg.id,
+            "audience": "admin",
             "sender_role": msg.sender_role,
             "body": msg.body,
             "public_id": item.public_id,

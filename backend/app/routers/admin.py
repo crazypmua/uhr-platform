@@ -15,6 +15,7 @@ from ..db import get_db
 from ..documents import kind_label
 from ..inbox import close as close_inbox
 from ..inbox import listen as listen_inbox
+from ..inbox import publish
 from ..mailer import send_mail
 from ..models import (
     Company,
@@ -470,7 +471,10 @@ def delete_request(item_id: int, db: Session = Depends(get_db)):
 
 
 def _people(rows) -> list[dict]:
-    return [{"id": row.id, "profession": row.profession, "city": row.city or ""} for row in rows]
+    return [
+        {"id": row.id, "name": row.name or "", "profession": row.profession or "", "city": row.city or ""}
+        for row in rows
+    ]
 
 
 def _selection_profiles(db: Session, item: Request) -> list[dict]:
@@ -586,6 +590,19 @@ def send_message(payload: MessageIn, user: User = Depends(get_current_admin), db
     msg = Message(request_id=item.id, sender_role="admin", sender_id=user.id, body=payload.body.strip())
     db.add(msg)
     db.commit()
+    db.refresh(msg)
+    publish(
+        {
+            "type": "message",
+            "audience": "company",
+            "company_id": item.company_id,
+            "request_id": item.id,
+            "public_id": item.public_id,
+            "message_id": msg.id,
+            "sender_role": "admin",
+            "body": msg.body,
+        }
+    )
     return {"ok": True, "id": msg.id}
 
 

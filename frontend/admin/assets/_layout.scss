@@ -416,6 +416,10 @@ body[data-site="admin"] {
 .admin-inbox {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+
+  &.has-anketa {
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(260px, 320px);
+  }
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -469,13 +473,20 @@ body[data-site="admin"] {
     text-overflow: ellipsis;
   }
 
-  &:hover,
-  &.is-active {
-    background: #edf2e5;
+  &:hover {
+    background: #f7f8f5;
   }
 
   &.is-new {
     background: #fbf6df;
+  }
+
+  &.is-active,
+  &.is-active:hover,
+  &.is-active.is-new,
+  &.is-active.is-new:hover {
+    background: #edf2e5;
+    box-shadow: inset 3px 0 0 #173e34;
   }
 }
 
@@ -540,28 +551,84 @@ body[data-site="admin"] {
 
 .admin-pick {
   display: grid;
-  gap: 2px;
-  min-width: 180px;
-  padding: 10px 12px;
+  gap: 4px;
+  width: 168px;
+  padding: 8px 10px;
+  text-align: left;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 10px;
 
-  b {
-    font-size: 14px;
-  }
-
-  span,
-  em {
+  b,
+  span {
     font-size: 12px;
-    font-style: normal;
-    color: var(--muted);
+    font-weight: 600;
+    line-height: 1.3;
   }
 
-  em {
-    color: #38582a;
+  small {
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
     font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
+
+  &.is-open {
+    border-color: #173e34;
+    box-shadow: inset 0 0 0 1px #173e34;
+  }
+}
+
+.admin-anketa {
+  display: none;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px 24px;
+  background: #fff;
+  border-left: 1px solid var(--line);
+
+  header {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 14px;
+
+    strong {
+      font-size: 16px;
+    }
+
+    button {
+      padding: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      background: transparent;
+    }
+  }
+
+  p {
+    margin: 0 0 12px;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  small {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+}
+
+.admin-inbox.has-anketa .admin-anketa {
+  display: block;
 }
 
 .admin-thread-head {
@@ -585,10 +652,10 @@ body[data-site="admin"] {
 
 .admin-bubbles {
   display: flex;
-  flex: 1;
+  flex: none;
   flex-direction: column;
   gap: 10px;
-  min-height: 0;
+  height: 560px;
   padding: 18px;
   overflow: auto;
   background: #f7f8f4;

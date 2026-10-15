@@ -4,7 +4,7 @@ import { ICONS } from "./icons.js";
 import { adminHref, adminRoute, adminSearch, adoptLegacyHash, navigate } from "./path.js";
 
 const app = document.querySelector("#app");
-const state = { user: null, toast: "" };
+const state = { user: null, toast: "", openAnketa: "" };
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -64,7 +64,7 @@ function paint(content, page) {
     return;
   }
   main.innerHTML = content;
-  window.scrollTo(0, 0);
+  if (page !== "messages") window.scrollTo(0, 0);
   layout.querySelectorAll(".admin-nav a").forEach((link) => {
     const active = link.getAttribute("href") === adminHref(page);
     link.classList.toggle("active", active);
@@ -525,11 +525,11 @@ function selectionBlock(people, project) {
   if (people?.length) {
     const cards = people
       .map(
-        (person) => `<a class="admin-pick" href="${adminHref(`masters/${person.id}`)}">
-          <b>#${person.id} · ${esc(person.profession || "Профіль")}</b>
-          <span>${esc(person.city || "Місто не вказано")}</span>
-          <em>Відкрити анкету</em>
-        </a>`
+        (person) => `<button type="button" class="admin-pick${String(state.openAnketa) === String(person.id) ? " is-open" : ""}" data-anketa="${person.id}">
+          <b>${esc(person.name || "Без імені")}</b>
+          <span><small>Професія</small>${esc(person.profession || "—")}</span>
+          <span><small>Місто</small>${esc(person.city || "—")}</span>
+        </button>`
       )
       .join("");
     return `<section class="admin-selection"><strong>Обрані анкети</strong><div class="admin-pick-list">${cards}</div></section>`;
@@ -639,7 +639,73 @@ async function messagesPage(id) {
       </form>`
     : `<div class="admin-thread-empty"><p>Оберіть заявку зі списку зліва.</p></div>`;
   return `${pageHead("Повідомлення", "Листування з компаніями по заявках.")}
-    <div class="admin-fill"><div class="admin-inbox"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section></div></div>`;
+    <div class="admin-fill"><div class="admin-inbox${state.openAnketa ? " has-anketa" : ""}"><aside class="admin-threads">${threads}</aside><section class="admin-conversation">${chat}</section><aside class="admin-anketa"></aside></div></div>`;
+}
+
+function filledValue(value) {
+  if (value === null || value === undefined || value === false) return false;
+  return String(value).trim() !== "";
+}
+
+function anketaText(item) {
+  const rows = [
+    ["Ім’я", item.name],
+    ["Професія", item.profession],
+    ["Місто", item.city],
+    ["Телефон", item.phone],
+    ["Email", item.email],
+    ["Перелік робіт", item.works],
+    ["Досвід роботи в Україні", item.experience_ua],
+    ["Досвід роботи в Нідерландах", item.experience_nl],
+    ["Мова", item.language],
+    ["Компанія", item.company_name],
+    ["KVK", item.kvk],
+    ["BTW", item.btw],
+    ["Адреса", item.address],
+    ["Сайт", item.website],
+    ["Instagram", item.instagram],
+    ["Facebook", item.facebook],
+    ["TikTok", item.tiktok],
+    ["Додаткові роботи", item.extra_work],
+    ["Досвід, років", item.experience_years],
+    ["Ставка €/год", item.hourly_rate],
+    ["Радіус, км", item.radius_km],
+    ["Доступність", item.availability],
+    ["По всій країні", item.nationwide ? "Так" : ""],
+    ["Портфоліо", item.portfolio_url],
+    ["Опис досвіду", item.description],
+  ].filter(([, value]) => filledValue(value));
+  const files = (item.documents || []).map((doc) => doc.original_name).filter(Boolean);
+  if (files.length) rows.push(["Файли", files.join(", ")]);
+  return rows
+    .map(([label, value]) => `<p><small>${esc(label)}</small>${esc(value)}</p>`)
+    .join("");
+}
+
+function closeAnketa() {
+  state.openAnketa = "";
+  document.querySelector(".admin-inbox")?.classList.remove("has-anketa");
+  document.querySelectorAll("[data-anketa]").forEach((button) => button.classList.remove("is-open"));
+  const pane = document.querySelector(".admin-anketa");
+  if (pane) pane.innerHTML = "";
+}
+
+async function openAnketa(id) {
+  state.openAnketa = String(id);
+  document.querySelectorAll("[data-anketa]").forEach((button) => {
+    button.classList.toggle("is-open", button.dataset.anketa === String(id));
+  });
+  const inbox = document.querySelector(".admin-inbox");
+  const pane = document.querySelector(".admin-anketa");
+  if (!inbox || !pane) return;
+  inbox.classList.add("has-anketa");
+  pane.innerHTML = `<p>Завантаження…</p>`;
+  try {
+    const item = await request(`/admin/craftsmen/${id}`);
+    pane.innerHTML = `<header><strong>${esc(item.name || "Без імені")}</strong><button type="button" data-anketa-close>Закрити</button></header><div class="admin-anketa-body">${anketaText(item) || "<p>Заповнених полів немає.</p>"}</div>`;
+  } catch (error) {
+    pane.innerHTML = `<header><strong>Анкета</strong><button type="button" data-anketa-close>Закрити</button></header><p>${esc(error.message)}</p>`;
+  }
 }
 
 async function render() {
@@ -676,6 +742,7 @@ async function render() {
   }
   icons();
   document.querySelector(".admin-bubbles")?.scrollTo(0, 99999);
+  if (page === "messages" && state.openAnketa) await openAnketa(state.openAnketa);
   if (page === "cms") await mountCms(arg);
   if (state.user) startInboxWatch();
 }
@@ -744,6 +811,16 @@ app.addEventListener("submit", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
+  const anketa = event.target.closest("[data-anketa]");
+  if (anketa) {
+    event.preventDefault();
+    await openAnketa(anketa.dataset.anketa);
+    return;
+  }
+  if (event.target.closest("[data-anketa-close]")) {
+    closeAnketa();
+    return;
+  }
   const link = event.target.closest("a[href]");
   if (
     link &&
