@@ -113,6 +113,13 @@ class CraftsmanApplication(BaseModel):
     portfolio_url: str = ""
 
 
+class ZzpLeadIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=1, max_length=64)
+    email: EmailStr
+    about: str = Field(default="", max_length=4000)
+
+
 class CompanyApplication(BaseModel):
     company_name: str = Field(min_length=1, max_length=255)
     kvk: str = ""

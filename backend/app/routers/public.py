@@ -5,12 +5,13 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile
 
+from ..config import settings
 from ..db import get_db
 from ..documents import DOCUMENT_KINDS, read_uploads, store_documents
 from ..mailer import send_mail
-from ..models import Company, Craftsman, SiteText
+from ..models import Company, Craftsman, SiteText, ZzpLead
 from ..notifications import craftsman_received
-from ..schemas import CompanyApplication, CraftsmanApplication
+from ..schemas import CompanyApplication, CraftsmanApplication, ZzpLeadIn
 
 router = APIRouter(tags=["public"])
 
@@ -67,6 +68,21 @@ def _save_with_documents(db: Session, item, owner_type: str, uploads: dict) -> N
             path.unlink(missing_ok=True)
         raise
     db.refresh(item)
+
+
+@router.post("/public/zzp")
+def create_zzp_lead(payload: ZzpLeadIn, background: BackgroundTasks, db: Session = Depends(get_db)):
+    item = ZzpLead(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    background.add_task(
+        send_mail,
+        settings.admin_email,
+        f"Заявка на реєстрацію ZZP: {item.name}",
+        f"ПІБ: {item.name}\nТелефон: {item.phone}\nEmail: {item.email}\n\nПро себе:\n{item.about or '—'}",
+    )
+    return {"id": item.id}
 
 
 @router.post("/public/applications/craftsmen")

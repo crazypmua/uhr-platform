@@ -7,6 +7,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 
+class ZzpLead(Base):
+    __tablename__ = "zzp_leads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    about: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
 
