@@ -24,7 +24,6 @@ DOCUMENT_KINDS = {
         "tools": "Фото інструментів",
         "vehicle": "Фото робочого автомобіля",
         "certificates": "Інші сертифікати",
-        "portrait": "Фото в робочому одязі",
     },
     "company": {
         "sna": "SNA-certificaat",
@@ -77,5 +76,10 @@ def store_documents(db: Session, owner_type: str, owner_id: int, uploads: dict[s
     return written
 
 
+LEGACY_KIND_LABELS = {
+    "craftsman": {"portrait": "Фото в робочому одязі"},
+}
+
+
 def kind_label(owner_type: str, kind: str) -> str:
-    return DOCUMENT_KINDS.get(owner_type, {}).get(kind, kind)
+    return DOCUMENT_KINDS.get(owner_type, {}).get(kind) or LEGACY_KIND_LABELS.get(owner_type, {}).get(kind, kind)

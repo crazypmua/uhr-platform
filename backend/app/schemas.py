@@ -85,6 +85,7 @@ class CmsCategorySave(BaseModel):
 
 
 class CraftsmanApplication(BaseModel):
+    avatar: Literal["avatar-1", "avatar-2", "avatar-3", "avatar-4", "avatar-5", "avatar-6", "avatar-7", "avatar-8"]
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=1, max_length=64)
     email: EmailStr

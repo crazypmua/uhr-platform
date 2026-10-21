@@ -135,6 +135,18 @@ body[data-site="admin"] {
   }
 }
 
+.admin-chosen-avatar {
+  margin: 24px 0;
+
+  img {
+    display: block;
+    width: 96px;
+    height: 96px;
+    object-fit: cover;
+    border-radius: 50%;
+  }
+}
+
 .admin-avatar {
   display: grid;
   flex: none;

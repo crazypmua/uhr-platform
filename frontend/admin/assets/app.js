@@ -177,7 +177,7 @@ async function overview() {
     ["Нові анкети", data.new_masters, adminHref("masters"), "Перевірка VCA та професійного досвіду."],
     ["Компанії на перевірці", data.companies_review, adminHref("companies"), "Перевірка юридичних даних та документів."],
     ["Активні заявки", data.active_requests, adminHref("requests"), "Планування та узгодження з компаніями."],
-    ["Опубліковані профілі", data.published_profiles, adminHref("masters"), "Обезличені профілі для каталогу UHR."],
+    ["Опубліковані профілі", data.published_profiles, adminHref("masters?status=approved"), "Обезличені профілі для каталогу UHR."],
   ];
   return `${pageHead("Огляд", "Ukrwerkspot збирає анкети майстрів. UHR приймає компанії.")}
     <div class="admin-metrics">${cards
@@ -218,8 +218,8 @@ async function siteSettings() {
     <div class="note">Доступ до закритого Ukrwerkspot передається окремою захищеною cookie на 1 годину, тому що браузер не дозволяє спільну cookie для двох різних доменів.</div></div>`;
 }
 
-function table(headers, rows) {
-  if (!rows.length) return `<div class="admin-empty">Поки що немає записів.</div>`;
+function table(headers, rows, empty = "Поки що немає записів.") {
+  if (!rows.length) return `<div class="admin-empty">${empty}</div>`;
   return `<div class="admin-sheet"><table class="admin-table">
     <thead><tr>${headers.map((h) => `<th${h === "Дії" ? ' class="admin-actions-col"' : ""}>${h}</th>`).join("")}</tr></thead>
     <tbody>${rows.join("")}</tbody>
@@ -227,7 +227,8 @@ function table(headers, rows) {
 }
 
 async function masters() {
-  const status = pageParams().get("status") || "";
+  const raw = pageParams().get("status");
+  const status = raw === null ? "pending" : raw === "all" ? "" : raw;
   const items = await request("/admin/craftsmen" + (status ? `?status=${encodeURIComponent(status)}` : ""));
   const meta = slicePage(items);
   const rows = meta.rows.map(
@@ -242,10 +243,11 @@ async function masters() {
       <td>${rowActions(adminHref(`masters/${item.id}`), "craftsmen", item.id, item.name)}</td>
     </tr>`
   );
-  return `${pageHead("Анкети майстрів", "Після схвалення публікується лише професійний профіль без імені та контактів.", statusFilter(status, "masters"))}${table(
+  return `${pageHead("Анкети майстрів", "Спочатку анкети, які чекають рішення. Після схвалення публікується лише професійний профіль без імені та контактів.", statusFilter(status, "masters"))}${table(
     ["ID", "Ім’я", "Спеціалізація", "Місто", "Джерело", "Статус", "Дата", "Дії"],
-    rows
-  )}${listFoot("masters", meta, { status })}`;
+    rows,
+    status === "pending" ? "Немає анкет на перевірці." : "Поки що немає записів."
+  )}${listFoot("masters", meta, { status: status || "all" })}`;
 }
 
 function fieldList(pairs) {
@@ -361,6 +363,7 @@ async function masterDetail(id) {
     <div class="eyebrow">Ukrwerkspot · анкета #${item.id}</div>
     <h1>${esc(item.name || "Без імені")}</h1>
     <p>${esc(item.profession)} · ${esc(item.city)} · ${esc(item.status_label)}</p>
+    ${/^avatar-[1-8]$/.test(item.avatar || "") ? `<div class="card admin-chosen-avatar"><h3>Аватар</h3><img src="/assets/images/${item.avatar}.svg" alt=""></div>` : ""}
     ${fieldList([
       ["Телефон", item.phone],
       ["Email", item.email],
@@ -1067,6 +1070,10 @@ app.addEventListener("change", (event) => {
   if (event.target.id === "status-filter") {
     const value = event.target.value;
     const section = event.target.dataset.section || "masters";
+    if (section === "masters") {
+      navigate(`${section}?status=${encodeURIComponent(value || "all")}`);
+      return;
+    }
     navigate(value ? `${section}?status=${encodeURIComponent(value)}` : section);
     return;
   }

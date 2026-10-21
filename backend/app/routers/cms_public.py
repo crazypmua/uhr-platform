@@ -120,6 +120,7 @@ def catalog(site: str, db: Session = Depends(get_db)):
             "works": item.works,
             "portfolio_url": item.portfolio_url,
             "provider_type": "company" if item.company_name else "individual",
+            "avatar": item.avatar,
             "certificates": ["VCA"] if item.id in with_vca else [],
         } for item in workers],
     }

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request as HttpRequest
 from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
@@ -145,6 +145,7 @@ def _craftsman_out(item: Craftsman, db: Session, full: bool = False) -> dict:
             "nationwide": item.nationwide,
             "description": item.description,
             "portfolio_url": item.portfolio_url,
+            "avatar": item.avatar,
             "admin_comment": item.admin_comment,
             "consent_at": dt(item.consent_at),
             "updated_at": dt(item.updated_at),
@@ -279,7 +280,8 @@ def preview_link(site: str, user: User = Depends(get_current_admin)):
 
 @router.get("/craftsmen")
 def craftsmen(status: str | None = None, db: Session = Depends(get_db)):
-    query = db.query(Craftsman).order_by(Craftsman.created_at.desc())
+    review_first = case((Craftsman.status == "pending", 0), (Craftsman.status == "clarification", 1), else_=2)
+    query = db.query(Craftsman).order_by(review_first, Craftsman.created_at.desc())
     if status:
         query = query.filter(Craftsman.status == status)
     return [_craftsman_out(item, db) for item in query.all()]

@@ -50,6 +50,7 @@ class Craftsman(Base):
     nationwide: Mapped[bool] = mapped_column(Boolean, default=False)
     description: Mapped[str] = mapped_column(Text, default="")
     portfolio_url: Mapped[str] = mapped_column(String(512), default="")
+    avatar: Mapped[str] = mapped_column(String(32), default="")
     admin_comment: Mapped[str] = mapped_column(Text, default="")
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

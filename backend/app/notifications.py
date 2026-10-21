@@ -3,6 +3,7 @@ from .documents import kind_label
 from .models import Company, Craftsman
 
 CRAFTSMAN_FIELDS = [
+    ("avatar", "Аватар"),
     ("name", "ПІБ"),
     ("phone", "Телефон"),
     ("email", "Email"),
