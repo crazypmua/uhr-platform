@@ -59,12 +59,19 @@ function shell(content, page) {
 function paint(content, page) {
   const layout = document.querySelector(".admin-layout");
   const main = layout?.querySelector(".admin-main");
+  const stayingOnMessages = page === "messages" && Boolean(document.querySelector(".admin-inbox"));
+  const threadScroll = stayingOnMessages ? document.querySelector(".admin-threads")?.scrollTop || 0 : 0;
+  const pageScroll = stayingOnMessages ? window.scrollY : 0;
   if (!layout || !main) {
     app.innerHTML = shell(content, page);
     return;
   }
   main.innerHTML = content;
-  if (page !== "messages") window.scrollTo(0, 0);
+  if (stayingOnMessages) {
+    window.scrollTo(0, pageScroll);
+    const threads = document.querySelector(".admin-threads");
+    if (threads) threads.scrollTop = threadScroll;
+  } else if (page !== "messages") window.scrollTo(0, 0);
   layout.querySelectorAll(".admin-nav a").forEach((link) => {
     const active = link.getAttribute("href") === adminHref(page);
     link.classList.toggle("active", active);
@@ -537,8 +544,8 @@ function waitingThreads(threads) {
   return (threads || []).filter((item) => item.last_sender === "company" && item.last_message_id);
 }
 
-function setMessageBadge(count) {
-  const link = document.querySelector(`.admin-nav a[href="${adminHref("messages")}"]`);
+function setNavBadge(section, count) {
+  const link = document.querySelector(`.admin-nav a[href="${adminHref(section)}"]`);
   if (!link) return;
   let badge = link.querySelector(".admin-nav-badge");
   if (!count) {
@@ -551,6 +558,19 @@ function setMessageBadge(count) {
     link.append(badge);
   }
   badge.textContent = String(count);
+}
+
+function setMessageBadge(count) {
+  setNavBadge("messages", count);
+}
+
+async function refreshReviewBadge() {
+  try {
+    const data = await request("/admin/overview");
+    setNavBadge("masters", data.new_masters || 0);
+  } catch {
+    /* лічильник оновиться під час наступного переходу */
+  }
 }
 
 function anketaLabel(count) {
@@ -628,7 +648,7 @@ function showIncoming(data) {
     return;
   }
   if (draft) inboxStale = true;
-  const badge = Number(document.querySelector(".admin-nav-badge")?.textContent || 0);
+  const badge = Number(document.querySelector(`.admin-nav a[href="${adminHref("messages")}"] .admin-nav-badge`)?.textContent || 0);
   setMessageBadge(badge + 1);
   const who = data.company_name ? ` · ${data.company_name}` : "";
   toast(`Нове повідомлення${who}.`);
@@ -812,7 +832,10 @@ async function render() {
   document.querySelector(".admin-bubbles")?.scrollTo(0, 99999);
   if (page === "messages" && state.openAnketa) await openAnketa(state.openAnketa);
   if (page === "cms") await mountCms(arg);
-  if (state.user) startInboxWatch();
+  if (state.user) {
+    startInboxWatch();
+    refreshReviewBadge();
+  }
 }
 
 let translateTimer = 0;
